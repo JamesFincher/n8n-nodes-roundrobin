@@ -196,8 +196,8 @@ export class RoundRobin implements INodeType {
       name: 'Round Robin',
       color: '#ff9900',
     },
-    inputs: ['main'] as any,
-    outputs: ['main'] as any,
+    inputs: ['main'],
+    outputs: ['main'],
     properties: [
       {
         displayName: 'Mode',
