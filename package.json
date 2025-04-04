@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-roundrobin",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "n8n node to store and retrieve messages in a round-robin fashion, particularly for LLM conversation loops with multiple personas",
   "keywords": [
     "n8n",
