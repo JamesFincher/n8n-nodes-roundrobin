@@ -1,8 +1,25 @@
-node_modules
-.DS_Store
-.tmp
-tmp
-dist
+# Dependencies
+node_modules/
+
+# Build
+dist/
+
+# Logs
+logs
+*.log
 npm-debug.log*
-yarn.lock
-.vscode/launch.json
+yarn-debug.log*
+yarn-error.log*
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db 

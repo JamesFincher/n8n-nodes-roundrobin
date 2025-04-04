@@ -1,0 +1,27 @@
+{
+  "name": "Round Robin",
+  "nodes": [
+    {
+      "displayName": "Round Robin",
+      "name": "roundRobin",
+      "group": ["transform"],
+      "version": 1,
+      "description": "Store and retrieve messages in a round-robin fashion",
+      "defaults": {
+        "name": "Round Robin",
+        "color": "#ff9900"
+      },
+      "inputs": ["main"],
+      "outputs": ["main"],
+      "properties": [
+        {
+          "displayName": "Number of Spots",
+          "name": "spotCount",
+          "type": "number",
+          "default": 3,
+          "description": "Number of spots in the round-robin"
+        }
+      ]
+    }
+  ]
+}

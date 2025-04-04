@@ -1,46 +1,48 @@
-![Banner image](https://user-images.githubusercontent.com/10284570/173569848-c624317f-42b1-45a6-ab09-f0ea3c247648.png)
+# n8n-nodes-roundrobin
 
-# n8n-nodes-starter
+This is a custom n8n node that implements a round-robin storage mechanism for messages, particularly designed for LLM conversation loops with multiple personas.
 
-This repo contains example nodes to help you get started building your own custom integrations for [n8n](n8n.io). It includes the node linter and other dependencies.
+## Features
 
-To make your custom node available to the community, you must create it as an npm package, and [submit it to the npm registry](https://docs.npmjs.com/packages-and-modules/contributing-packages-to-the-registry).
+- Store messages from different personas in a round-robin fashion
+- Configure the number of spots and roles for each spot
+- Track each persona's messages
+- Display all round-robin inputs upon completion
 
-## Prerequisites
+## Installation
 
-You need the following installed on your development machine:
+### Local Installation
 
-* [git](https://git-scm.com/downloads)
-* Node.js and pnpm. Minimum version Node 18. You can find instructions on how to install both using nvm (Node Version Manager) for Linux, Mac, and WSL [here](https://github.com/nvm-sh/nvm). For Windows users, refer to Microsoft's guide to [Install NodeJS on Windows](https://docs.microsoft.com/en-us/windows/dev-environment/javascript/nodejs-on-windows).
-* Install n8n with:
-  ```
-  pnpm install n8n -g
-  ```
-* Recommended: follow n8n's guide to [set up your development environment](https://docs.n8n.io/integrations/creating-nodes/build/node-development-environment/).
+1. Clone this repository
+2. Navigate to the project directory: `cd n8n-nodes-roundrobin`
+3. Install dependencies: `npm install`
+4. Build the code: `npm run build`
+5. Link to your n8n installation:
+   - Create a symbolic link: `npm link`
+   - In your n8n installation directory: `npm link n8n-nodes-roundrobin`
 
-## Using this starter
+### Global Installation (via npm)
 
-These are the basic steps for working with the starter. For detailed guidance on creating and publishing nodes, refer to the [documentation](https://docs.n8n.io/integrations/creating-nodes/).
+```
+npm install -g n8n-nodes-roundrobin
+```
 
-1. [Generate a new repository](https://github.com/n8n-io/n8n-nodes-starter/generate) from this template repository.
-2. Clone your new repo:
-   ```
-   git clone https://github.com/<your organization>/<your-repo-name>.git
-   ```
-3. Run `pnpm i` to install dependencies.
-4. Open the project in your editor.
-5. Browse the examples in `/nodes` and `/credentials`. Modify the examples, or replace them with your own nodes.
-6. Update the `package.json` to match your details.
-7. Run `pnpm lint` to check for errors or `pnpm lintfix` to automatically fix errors when possible.
-8. Test your node locally. Refer to [Run your node locally](https://docs.n8n.io/integrations/creating-nodes/test/run-node-locally/) for guidance.
-9. Replace this README with documentation for your node. Use the [README_TEMPLATE](README_TEMPLATE.md) to get started.
-10. Update the LICENSE file to use your details.
-11. [Publish](https://docs.npmjs.com/packages-and-modules/contributing-packages-to-the-registry) your package to npm.
+## Usage
 
-## More information
+1. Add the "Round Robin" node to your workflow
+2. Configure the number of spots (personas)
+3. Define the role for each spot
+4. Connect your LLM output nodes to this node
+5. Use the node in a loop to collect messages from each persona
+6. When the loop is complete, the node will output all collected messages
 
-Refer to our [documentation on creating nodes](https://docs.n8n.io/integrations/creating-nodes/) for detailed information on building your own nodes.
+## Example Workflow
+
+- Set up an LLM with multiple personas (e.g., critic, creator, analyst)
+- Connect each LLM output to the Round Robin node
+- The node will store each persona's message in its dedicated spot
+- When all spots are filled or the process is complete, retrieve the entire conversation
 
 ## License
 
-[MIT](https://github.com/n8n-io/n8n-nodes-starter/blob/master/LICENSE.md)
+MIT

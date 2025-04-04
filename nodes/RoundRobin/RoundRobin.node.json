@@ -1,0 +1,164 @@
+{
+  "node": "n8n-nodes-base.roundRobin",
+  "nodeVersion": "1.0",
+  "codexVersion": "1.0",
+  "categories": [
+    "Utility",
+    "Data Transformation"
+  ],
+  "resources": {
+    "credentialDocumentation": [],
+    "primaryDocumentation": []
+  },
+  "subcategories": {
+    "Utility": [
+      "Data"
+    ],
+    "Data Transformation": [
+      "Data Storage"
+    ]
+  },
+  "alias": [
+    "conversation",
+    "llm",
+    "roundrobin"
+  ],
+  "properties": [
+    {
+      "displayName": "Mode",
+      "name": "mode",
+      "type": "options",
+      "options": [
+        {
+          "name": "Store",
+          "value": "store",
+          "description": "Store a message in the round-robin"
+        },
+        {
+          "name": "Retrieve",
+          "value": "retrieve",
+          "description": "Retrieve all messages from the round-robin"
+        },
+        {
+          "name": "Clear",
+          "value": "clear",
+          "description": "Clear all stored messages"
+        }
+      ],
+      "default": "store",
+      "noDataExpression": true,
+      "required": true,
+      "description": "The operation to perform"
+    },
+    {
+      "displayName": "Number of Spots",
+      "name": "spotCount",
+      "type": "number",
+      "default": 3,
+      "required": true,
+      "displayOptions": {
+        "show": {
+          "mode": [
+            "store"
+          ]
+        }
+      },
+      "description": "Number of spots in the round-robin"
+    },
+    {
+      "displayName": "Roles",
+      "name": "roles",
+      "placeholder": "Add Role",
+      "typeOptions": {
+        "multipleValues": true,
+        "multipleValueButtonText": "Add Role"
+      },
+      "type": "fixedCollection",
+      "default": {},
+      "displayOptions": {
+        "show": {
+          "mode": [
+            "store"
+          ]
+        }
+      },
+      "description": "Define the roles for each spot in the round-robin",
+      "options": [
+        {
+          "name": "roleValues",
+          "displayName": "Roles",
+          "values": [
+            {
+              "displayName": "Role Name",
+              "name": "name",
+              "type": "string",
+              "default": "",
+              "description": "Name of the role/persona"
+            },
+            {
+              "displayName": "Role Description",
+              "name": "description",
+              "type": "string",
+              "default": "",
+              "description": "Description of the role/persona"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "displayName": "Input Field",
+      "name": "inputField",
+      "type": "string",
+      "default": "message",
+      "displayOptions": {
+        "show": {
+          "mode": [
+            "store"
+          ]
+        }
+      },
+      "description": "The name of the field containing the message to store"
+    },
+    {
+      "displayName": "Spot Index",
+      "name": "spotIndex",
+      "type": "number",
+      "default": 0,
+      "displayOptions": {
+        "show": {
+          "mode": [
+            "store"
+          ]
+        }
+      },
+      "description": "Specify which spot to store the current message in (0-based index)"
+    },
+    {
+      "displayName": "Output Format",
+      "name": "outputFormat",
+      "type": "options",
+      "options": [
+        {
+          "name": "Array",
+          "value": "array",
+          "description": "Output messages as an array"
+        },
+        {
+          "name": "Object",
+          "value": "object",
+          "description": "Output messages as an object with role keys"
+        }
+      ],
+      "default": "array",
+      "displayOptions": {
+        "show": {
+          "mode": [
+            "retrieve"
+          ]
+        }
+      },
+      "description": "Format of the retrieved messages"
+    }
+  ]
+}
