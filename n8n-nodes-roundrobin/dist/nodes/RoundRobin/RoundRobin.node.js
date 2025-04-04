@@ -225,13 +225,33 @@ class RoundRobin {
             const staticData = this.getWorkflowStaticData('node');
             console.log('RoundRobin node executing in mode:', mode);
             console.log('Initial staticData keys:', Object.keys(staticData));
-            if (!staticData.messages)
+            if (staticData._serializedMessages && (!staticData.messages || !Array.isArray(staticData.messages))) {
+                try {
+                    staticData.messages = JSON.parse(staticData._serializedMessages);
+                    console.log('Reconstructed messages from serialized data, count:', staticData.messages.length);
+                }
+                catch (e) {
+                    console.error('Failed to parse serialized messages:', e);
+                    staticData.messages = [];
+                }
+            }
+            if (staticData._serializedRoles && (!staticData.roles || !Array.isArray(staticData.roles))) {
+                try {
+                    staticData.roles = JSON.parse(staticData._serializedRoles);
+                    console.log('Reconstructed roles from serialized data, count:', staticData.roles.length);
+                }
+                catch (e) {
+                    console.error('Failed to parse serialized roles:', e);
+                    staticData.roles = [];
+                }
+            }
+            if (!staticData.messages || !Array.isArray(staticData.messages))
                 staticData.messages = [];
-            if (!staticData.roles)
+            if (!staticData.roles || !Array.isArray(staticData.roles))
                 staticData.roles = [];
-            if (!staticData.spotCount)
+            if (typeof staticData.spotCount !== 'number')
                 staticData.spotCount = 0;
-            if (!staticData.lastUpdated)
+            if (typeof staticData.lastUpdated !== 'number')
                 staticData.lastUpdated = Date.now();
             if (mode === 'store') {
                 const spotCount = this.getNodeParameter('spotCount', 0);
@@ -316,6 +336,13 @@ class RoundRobin {
                     });
                 }
                 staticData.lastUpdated = Date.now();
+                try {
+                    staticData._serializedMessages = JSON.stringify(staticData.messages);
+                    staticData._serializedRoles = JSON.stringify(staticData.roles);
+                }
+                catch (e) {
+                    console.error('Failed to serialize data:', e);
+                }
             }
             else if (mode === 'retrieve') {
                 const outputFormat = this.getNodeParameter('outputFormat', 0);
@@ -336,7 +363,7 @@ class RoundRobin {
                     });
                     return [returnData];
                 }
-                let messages = [...staticData.messages];
+                let messages = JSON.parse(JSON.stringify(staticData.messages));
                 if (maxMessages > 0 && messages.length > maxMessages) {
                     messages = messages.slice(-maxMessages);
                 }
@@ -349,7 +376,7 @@ class RoundRobin {
                         lastUpdated: new Date(staticData.lastUpdated).toISOString(),
                     };
                     if (!simplifyOutput) {
-                        outputJson.roles = staticData.roles;
+                        outputJson.roles = JSON.parse(JSON.stringify(staticData.roles));
                     }
                     returnData.push({ json: outputJson });
                 }
@@ -373,7 +400,7 @@ class RoundRobin {
                         lastUpdated: new Date(staticData.lastUpdated).toISOString(),
                     };
                     if (!simplifyOutput) {
-                        outputJson.roles = staticData.roles;
+                        outputJson.roles = JSON.parse(JSON.stringify(staticData.roles));
                     }
                     returnData.push({ json: outputJson });
                 }
@@ -397,6 +424,8 @@ class RoundRobin {
             }
             else if (mode === 'clear') {
                 staticData.messages = [];
+                staticData._serializedMessages = JSON.stringify([]);
+                staticData._serializedRoles = JSON.stringify(staticData.roles);
                 staticData.lastUpdated = Date.now();
                 console.log('Storage cleared successfully');
                 returnData.push({
@@ -408,6 +437,13 @@ class RoundRobin {
                 });
             }
             console.log('Final storage state - message count:', staticData.messages.length);
+            try {
+                staticData._serializedMessages = JSON.stringify(staticData.messages);
+                staticData._serializedRoles = JSON.stringify(staticData.roles);
+            }
+            catch (e) {
+                console.error('Failed to serialize data at end of execution:', e);
+            }
         }
         catch (error) {
             if (error instanceof n8n_workflow_1.NodeOperationError) {

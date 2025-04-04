@@ -25,6 +25,9 @@ interface IStaticData extends IDataObject {
   roles: IRoundRobinRole[];
   spotCount: number;
   lastUpdated: number;
+  // Add serialized data properties for more reliable storage
+  _serializedMessages?: string;
+  _serializedRoles?: string;
 }
 
 // Define interfaces for our output data
@@ -283,11 +286,32 @@ export class RoundRobin implements INodeType {
       console.log('RoundRobin node executing in mode:', mode);
       console.log('Initial staticData keys:', Object.keys(staticData));
       
+      // Reconstruct data from serialized form if available
+      if (staticData._serializedMessages && (!staticData.messages || !Array.isArray(staticData.messages))) {
+        try {
+          staticData.messages = JSON.parse(staticData._serializedMessages);
+          console.log('Reconstructed messages from serialized data, count:', staticData.messages.length);
+        } catch (e) {
+          console.error('Failed to parse serialized messages:', e);
+          staticData.messages = [];
+        }
+      }
+      
+      if (staticData._serializedRoles && (!staticData.roles || !Array.isArray(staticData.roles))) {
+        try {
+          staticData.roles = JSON.parse(staticData._serializedRoles);
+          console.log('Reconstructed roles from serialized data, count:', staticData.roles.length);
+        } catch (e) {
+          console.error('Failed to parse serialized roles:', e);
+          staticData.roles = [];
+        }
+      }
+      
       // Initialize storage properties if they don't exist
-      if (!staticData.messages) staticData.messages = [];
-      if (!staticData.roles) staticData.roles = [];
-      if (!staticData.spotCount) staticData.spotCount = 0;
-      if (!staticData.lastUpdated) staticData.lastUpdated = Date.now();
+      if (!staticData.messages || !Array.isArray(staticData.messages)) staticData.messages = [];
+      if (!staticData.roles || !Array.isArray(staticData.roles)) staticData.roles = [];
+      if (typeof staticData.spotCount !== 'number') staticData.spotCount = 0;
+      if (typeof staticData.lastUpdated !== 'number') staticData.lastUpdated = Date.now();
       
       // Mode specific operations
       if (mode === 'store') {
@@ -402,6 +426,14 @@ export class RoundRobin implements INodeType {
         // Update lastUpdated timestamp
         staticData.lastUpdated = Date.now();
         
+        // Serialize the data for more reliable storage
+        try {
+          staticData._serializedMessages = JSON.stringify(staticData.messages);
+          staticData._serializedRoles = JSON.stringify(staticData.roles);
+        } catch (e) {
+          console.error('Failed to serialize data:', e);
+        }
+        
       } else if (mode === 'retrieve') {
         const outputFormat = this.getNodeParameter('outputFormat', 0) as string;
         const maxMessages = this.getNodeParameter('maxMessages', 0, 0) as number;
@@ -426,7 +458,7 @@ export class RoundRobin implements INodeType {
           return [returnData];
         }
         
-        let messages = [...staticData.messages];
+        let messages = JSON.parse(JSON.stringify(staticData.messages)); // Deep clone for safety
         
         // Apply maximum message limit if specified
         if (maxMessages > 0 && messages.length > maxMessages) {
@@ -446,7 +478,7 @@ export class RoundRobin implements INodeType {
           
           if (!simplifyOutput) {
             // Add more metadata if not simplifying
-            outputJson.roles = staticData.roles;
+            outputJson.roles = JSON.parse(JSON.stringify(staticData.roles));
           }
           
           returnData.push({ json: outputJson });
@@ -476,7 +508,7 @@ export class RoundRobin implements INodeType {
           
           if (!simplifyOutput) {
             // Add more metadata if not simplifying
-            outputJson.roles = staticData.roles;
+            outputJson.roles = JSON.parse(JSON.stringify(staticData.roles));
           }
           
           returnData.push({ json: outputJson });
@@ -503,6 +535,8 @@ export class RoundRobin implements INodeType {
       } else if (mode === 'clear') {
         // Reset storage data - direct property assignment
         staticData.messages = [];
+        staticData._serializedMessages = JSON.stringify([]);
+        staticData._serializedRoles = JSON.stringify(staticData.roles); // Preserve roles
         staticData.lastUpdated = Date.now();
         
         console.log('Storage cleared successfully');
@@ -518,6 +552,14 @@ export class RoundRobin implements INodeType {
       
       // Final debug log to confirm data persistence
       console.log('Final storage state - message count:', staticData.messages.length);
+      
+      // Always update serialized data before finishing execution
+      try {
+        staticData._serializedMessages = JSON.stringify(staticData.messages);
+        staticData._serializedRoles = JSON.stringify(staticData.roles);
+      } catch (e) {
+        console.error('Failed to serialize data at end of execution:', e);
+      }
       
     } catch (error) {
       if (error instanceof NodeOperationError) {
