@@ -221,7 +221,7 @@ class RoundRobin {
                             outputFormat: ['object'],
                         },
                     },
-                    default: '<b>Object Format Example:</b><br><code>{"messagesByRole": {"Critic": ["This needs improvement", ...], "Creator": ["Here's a new idea", ...]}}</code>',
+                    default: '<b>Object Format Example:</b><br><code>{"messagesByRole": {"Critic": ["This needs improvement", ...], "Creator": ["Here\'s a new idea", ...]}}</code>',
                 },
                 {
                     displayName: 'Clear Confirmation',
