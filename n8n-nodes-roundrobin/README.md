@@ -139,6 +139,12 @@ Resets all stored messages while preserving role configurations.
 
 ## Version History
 
+### v0.6.1 - Storage Reliability Fix
+- Fixed critical issue with data persistence between workflow executions
+- Implemented robust serialization to ensure messages and roles are properly stored
+- Added more thorough type checking and initialization of static data
+- Improved error handling for serialization/deserialization
+
 ### v0.5.0 - Phase 1 Release
 - Fixed storage implementation for reliable persistence
 - Added "Simplify Output" option for cleaner data
