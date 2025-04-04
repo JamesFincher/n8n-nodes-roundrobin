@@ -1,5 +1,14 @@
-import { INodeType } from 'n8n-workflow';
 import { RoundRobin } from './nodes/RoundRobin/RoundRobin.node';
 export { RoundRobin };
-export declare const nodeClasses: INodeType[];
+export declare const nodeTypes: {
+    class: typeof RoundRobin;
+    description: {
+        displayName: string;
+        name: string;
+        icon: string;
+        group: string[];
+        version: number;
+        description: string;
+    };
+}[];
 //# sourceMappingURL=index.d.ts.map

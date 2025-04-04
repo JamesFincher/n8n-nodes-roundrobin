@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.7 (2025-03-29)
+### Fixed
+- Added proper index.ts for better TypeScript support
+- Updated index.js to use compiled TypeScript exports
+- Improved node exports to match n8n's expected format
+
 ## v0.8.6 (2025-03-29)
 ### Fixed
 - Fixed TypeScript errors related to n8n type definitions
