@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.6 (2025-03-29)
+### Fixed
+- Fixed TypeScript errors related to n8n type definitions
+- Updated n8n imports to work with latest n8n types
+- Removed deprecated code references to improve compatibility
+
 ## v0.8.5 (2025-03-29)
 ### Fixed
 - Added clear persistence guide explaining n8n's behavior with static data

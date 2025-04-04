@@ -1,10 +1,10 @@
-import {
+import { 
   NodeOperationError,
   IExecuteFunctions,
   INodeExecutionData,
   INodeType,
   INodeTypeDescription,
-  IDataObject,
+  IDataObject
 } from 'n8n-workflow';
 
 interface IRoundRobinMessage {
