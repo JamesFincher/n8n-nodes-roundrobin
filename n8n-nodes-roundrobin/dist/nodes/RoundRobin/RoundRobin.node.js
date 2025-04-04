@@ -648,26 +648,34 @@ function processObjectOutput(returnData, messages, roles, lastUpdated, simplifyO
     returnData.push({ json: outputJson });
 }
 function processConversationHistoryOutput(executeFunctions, returnData, messages, roles, lastUpdated, simplifyOutput) {
-    const llmPlatform = executeFunctions.getNodeParameter('llmPlatform', 0, 'openai');
-    const includeSystemPrompt = executeFunctions.getNodeParameter('includeSystemPrompt', 0, true);
-    const systemPromptPosition = executeFunctions.getNodeParameter('systemPromptPosition', 0, 'start');
-    const systemRole = roles.find(role => role.name.toLowerCase() === 'system');
-    const systemPrompt = (systemRole === null || systemRole === void 0 ? void 0 : systemRole.systemPrompt) || 'You are a helpful, friendly AI assistant.';
-    const enabledMessages = messages.filter(msg => {
-        const role = roles.find(r => r.name === msg.role);
-        return (role === null || role === void 0 ? void 0 : role.isEnabled) !== false;
-    });
-    if (llmPlatform === 'openai') {
-        formatOpenAIConversation(returnData, enabledMessages, systemPrompt, includeSystemPrompt, systemPromptPosition, lastUpdated, simplifyOutput, roles);
+    try {
+        const llmPlatform = String(executeFunctions.getNodeParameter('llmPlatform', 0, 'openai'));
+        const includeSystemPrompt = Boolean(executeFunctions.getNodeParameter('includeSystemPrompt', 0, true));
+        const systemPromptPosition = String(executeFunctions.getNodeParameter('systemPromptPosition', 0, 'start'));
+        const systemRole = roles.find(role => role.name.toLowerCase() === 'system');
+        const systemPrompt = (systemRole === null || systemRole === void 0 ? void 0 : systemRole.systemPrompt) || 'You are a helpful, friendly AI assistant.';
+        const enabledMessages = messages.filter(msg => {
+            const role = roles.find(r => r.name === msg.role);
+            return (role === null || role === void 0 ? void 0 : role.isEnabled) !== false;
+        });
+        if (llmPlatform === 'openai') {
+            formatOpenAIConversation(returnData, enabledMessages, systemPrompt, includeSystemPrompt, systemPromptPosition, lastUpdated, simplifyOutput, roles);
+        }
+        else if (llmPlatform === 'anthropic') {
+            formatAnthropicConversation(returnData, enabledMessages, systemPrompt, includeSystemPrompt, lastUpdated, simplifyOutput);
+        }
+        else if (llmPlatform === 'google') {
+            formatGoogleConversation(returnData, enabledMessages, systemPrompt, includeSystemPrompt, systemPromptPosition, lastUpdated, simplifyOutput, roles);
+        }
+        else {
+            formatGenericConversation(returnData, enabledMessages, systemPrompt, includeSystemPrompt, systemPromptPosition, lastUpdated, simplifyOutput, roles);
+        }
     }
-    else if (llmPlatform === 'anthropic') {
-        formatAnthropicConversation(returnData, enabledMessages, systemPrompt, includeSystemPrompt, lastUpdated, simplifyOutput);
-    }
-    else if (llmPlatform === 'google') {
-        formatGoogleConversation(returnData, enabledMessages, systemPrompt, includeSystemPrompt, systemPromptPosition, lastUpdated, simplifyOutput, roles);
-    }
-    else {
-        formatGenericConversation(returnData, enabledMessages, systemPrompt, includeSystemPrompt, systemPromptPosition, lastUpdated, simplifyOutput, roles);
+    catch (error) {
+        if (error instanceof Error) {
+            throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), `Error in conversation history processing: ${error.message}`);
+        }
+        throw error;
     }
 }
 function formatOpenAIConversation(returnData, messages, systemPrompt, includeSystemPrompt, systemPromptPosition, lastUpdated, simplifyOutput, roles) {

@@ -833,64 +833,75 @@ function processConversationHistoryOutput(
   lastUpdated: number,
   simplifyOutput: boolean
 ): void {
-  // Get parameters
-  const llmPlatform = executeFunctions.getNodeParameter('llmPlatform', 0, 'openai') as string;
-  const includeSystemPrompt = executeFunctions.getNodeParameter('includeSystemPrompt', 0, true) as boolean;
-  const systemPromptPosition = executeFunctions.getNodeParameter('systemPromptPosition', 0, 'start') as string;
-  
-  // Find system role data
-  const systemRole = roles.find(role => role.name.toLowerCase() === 'system');
-  const systemPrompt = systemRole?.systemPrompt || 'You are a helpful, friendly AI assistant.';
-  
-  // Filter out disabled roles if needed
-  const enabledMessages = messages.filter(msg => {
-    const role = roles.find(r => r.name === msg.role);
-    return role?.isEnabled !== false; // If not explicitly disabled, include it
-  });
-  
-  // Format based on LLM platform
-  if (llmPlatform === 'openai') {
-    formatOpenAIConversation(
-      returnData,
-      enabledMessages,
-      systemPrompt,
-      includeSystemPrompt,
-      systemPromptPosition,
-      lastUpdated,
-      simplifyOutput,
-      roles
-    );
-  } else if (llmPlatform === 'anthropic') {
-    formatAnthropicConversation(
-      returnData,
-      enabledMessages,
-      systemPrompt,
-      includeSystemPrompt,
-      lastUpdated,
-      simplifyOutput
-    );
-  } else if (llmPlatform === 'google') {
-    formatGoogleConversation(
-      returnData,
-      enabledMessages,
-      systemPrompt,
-      includeSystemPrompt,
-      systemPromptPosition,
-      lastUpdated,
-      simplifyOutput,
-      roles
-    );
-  } else {
-    formatGenericConversation(
-      returnData,
-      enabledMessages,
-      systemPrompt,
-      includeSystemPrompt,
-      systemPromptPosition,
-      lastUpdated,
-      simplifyOutput,
-      roles
-    );
+  try { // Add try/catch to better handle errors
+    // Get parameters with explicit type casting and default values
+    const llmPlatform = String(executeFunctions.getNodeParameter('llmPlatform', 0, 'openai'));
+    const includeSystemPrompt = Boolean(executeFunctions.getNodeParameter('includeSystemPrompt', 0, true));
+    const systemPromptPosition = String(executeFunctions.getNodeParameter('systemPromptPosition', 0, 'start'));
+    
+    // Find system role data
+    const systemRole = roles.find(role => role.name.toLowerCase() === 'system');
+    const systemPrompt = systemRole?.systemPrompt || 'You are a helpful, friendly AI assistant.';
+    
+    // Filter out disabled roles if needed
+    const enabledMessages = messages.filter(msg => {
+      const role = roles.find(r => r.name === msg.role);
+      return role?.isEnabled !== false; // If not explicitly disabled, include it
+    });
+    
+    // Format based on LLM platform
+    if (llmPlatform === 'openai') {
+      formatOpenAIConversation(
+        returnData,
+        enabledMessages,
+        systemPrompt,
+        includeSystemPrompt,
+        systemPromptPosition,
+        lastUpdated,
+        simplifyOutput,
+        roles
+      );
+    } else if (llmPlatform === 'anthropic') {
+      formatAnthropicConversation(
+        returnData,
+        enabledMessages,
+        systemPrompt,
+        includeSystemPrompt,
+        lastUpdated,
+        simplifyOutput
+      );
+    } else if (llmPlatform === 'google') {
+      formatGoogleConversation(
+        returnData,
+        enabledMessages,
+        systemPrompt,
+        includeSystemPrompt,
+        systemPromptPosition,
+        lastUpdated,
+        simplifyOutput,
+        roles
+      );
+    } else {
+      formatGenericConversation(
+        returnData,
+        enabledMessages,
+        systemPrompt,
+        includeSystemPrompt,
+        systemPromptPosition,
+        lastUpdated,
+        simplifyOutput,
+        roles
+      );
+    }
+  } catch (error) {
+    // Provide better error message with context
+    if (error instanceof Error) {
+      throw new NodeOperationError(
+        executeFunctions.getNode(),
+        `Error in conversation history processing: ${error.message}`
+      );
+    }
+    throw error;
   }
 }
 
