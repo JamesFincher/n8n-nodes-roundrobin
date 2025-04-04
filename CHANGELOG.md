@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.9.0 (2024-04-04)
+## v0.9.1 (2024-04-04)
 ### Added
 - Added conversation round counter to track conversation turns
 - Added UI to display and limit the number of rounds
