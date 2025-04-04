@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.8 (2025-03-30)
+### Fixed
+- Fixed TypeScript errors in binary storage functionality
+- Added proper typing for binary data storage
+- Improved compatibility with different n8n workflow versions
+- Added graceful handling of binary data
+
 ## v0.8.7 (2025-03-29)
 ### Fixed
 - Added proper index.ts for better TypeScript support

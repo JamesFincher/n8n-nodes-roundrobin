@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RoundRobin = exports.RoundRobinStorage = void 0;
 const n8n_workflow_1 = require("n8n-workflow");
+const ExternalStorage_1 = require("./ExternalStorage");
 class RoundRobinStorage {
     static getPrefix(workflowId) {
         const safeWorkflowId = String(workflowId || 'default_workflow').replace(/[^a-zA-Z0-9]/g, '_');
@@ -127,27 +128,22 @@ class RoundRobin {
                     type: 'options',
                     options: [
                         {
-                            name: 'Store',
+                            name: 'Store Messages',
                             value: 'store',
-                            description: 'Store a message in the round-robin',
-                            action: 'Store a message in the round robin',
+                            description: 'Store messages in the conversation',
                         },
                         {
-                            name: 'Retrieve',
+                            name: 'Retrieve Messages',
                             value: 'retrieve',
-                            description: 'Retrieve all messages from the round-robin',
-                            action: 'Retrieve all messages from the round robin',
+                            description: 'Retrieve stored messages',
                         },
                         {
-                            name: 'Clear',
+                            name: 'Clear All Messages',
                             value: 'clear',
                             description: 'Clear all stored messages',
-                            action: 'Clear all stored messages',
                         },
                     ],
                     default: 'store',
-                    noDataExpression: true,
-                    required: true,
                     description: 'The operation to perform',
                 },
                 {
@@ -451,6 +447,38 @@ class RoundRobin {
                     description: 'Maximum number of messages to return (0 for all messages)',
                 },
                 {
+                    displayName: 'Storage Persistence',
+                    name: 'storagePersistence',
+                    type: 'options',
+                    options: [
+                        {
+                            name: 'Use Static Data (Requires Trigger)',
+                            value: 'staticData',
+                            description: 'Store data in n8n static data (requires workflow to be activated with a trigger node)',
+                        },
+                        {
+                            name: 'Use Binary Data (Reliable)',
+                            value: 'binary',
+                            description: 'Store data in binary output (reliable but requires passing binary data between nodes)',
+                        },
+                    ],
+                    default: 'staticData',
+                    description: 'How to persist data between executions',
+                },
+                {
+                    displayName: 'Binary Input Property',
+                    name: 'binaryInputProperty',
+                    type: 'string',
+                    default: 'data',
+                    displayOptions: {
+                        show: {
+                            storagePersistence: ['binary'],
+                            mode: ['retrieve', 'clear'],
+                        },
+                    },
+                    description: 'Name of the binary property that contains the storage data',
+                },
+                {
                     displayName: 'Storage ID',
                     name: 'storageId',
                     type: 'string',
@@ -486,6 +514,7 @@ For reliable data storage between executions:
         const items = this.getInputData();
         const returnData = [];
         const mode = this.getNodeParameter('mode', 0);
+        const storagePersistence = this.getNodeParameter('storagePersistence', 0, 'staticData');
         try {
             const nodeName = this.getNode().name;
             let workflowId = (_a = this.getWorkflow()) === null || _a === void 0 ? void 0 : _a.id;
@@ -503,6 +532,11 @@ For reliable data storage between executions:
                 workflowId = userStorageId;
             }
             console.log(`[Execution] Using effective ID for storage: ${workflowId}`);
+            console.log(`[Execution] Storage persistence mode: ${storagePersistence}`);
+            if (storagePersistence === 'binary') {
+                await RoundRobin.handleBinaryStorageExecution(this, items, returnData, mode, workflowId);
+                return [returnData];
+            }
             const staticData = this.getWorkflowStaticData('global');
             RoundRobinStorage.initializeStorage(staticData, workflowId);
             console.log('RoundRobin node executing in mode:', mode);
@@ -610,6 +644,10 @@ For reliable data storage between executions:
                 });
             }
             console.log('Final storage state - message count:', RoundRobinStorage.getMessages(staticData, workflowId).length);
+            if (storagePersistence === 'staticData') {
+                RoundRobinStorage.verifyStoragePersistence(staticData, workflowId);
+            }
+            return [returnData];
         }
         catch (error) {
             if (error instanceof n8n_workflow_1.NodeOperationError) {
@@ -617,7 +655,118 @@ For reliable data storage between executions:
             }
             throw new n8n_workflow_1.NodeOperationError(this.getNode(), error instanceof Error ? error.message : 'An unknown error occurred');
         }
-        return [returnData];
+    }
+    static async handleBinaryStorageExecution(executeFunctions, items, returnData, mode, storageId) {
+        var _a, _b;
+        const storageManager = (0, ExternalStorage_1.createStorageManager)(executeFunctions, 'binary', storageId);
+        if (mode === 'store') {
+            const newSpotCount = executeFunctions.getNodeParameter('spotCount', 0);
+            const spotIndex = executeFunctions.getNodeParameter('spotIndex', 0);
+            const inputField = executeFunctions.getNodeParameter('inputField', 0);
+            const rolesCollection = executeFunctions.getNodeParameter('roles', 0);
+            const updatedRoles = processRoles(rolesCollection);
+            const finalRoles = updatedRoles.length > 0 ? updatedRoles : getDefaultRoles();
+            let existingMessages = [];
+            let existingRoles = finalRoles;
+            if ((_a = items[0]) === null || _a === void 0 ? void 0 : _a.binary) {
+                try {
+                    const binaryInputProperty = executeFunctions.getNodeParameter('binaryInputProperty', 0, 'data');
+                    const loadedData = await storageManager.loadFromBinary(items[0].binary);
+                    existingMessages = loadedData.messages || [];
+                    if (updatedRoles.length === 0 && loadedData.roles && loadedData.roles.length > 0) {
+                        existingRoles = loadedData.roles;
+                    }
+                }
+                catch (error) {
+                    console.log(`[Binary Storage] Could not load existing data: ${error.message}`);
+                }
+            }
+            if (spotIndex < 0 || spotIndex >= newSpotCount) {
+                throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), `Spot index must be between 0 and ${newSpotCount - 1}`);
+            }
+            const updatedMessages = [...existingMessages];
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                const messageContent = extractMessageContent(item, inputField, i, executeFunctions);
+                const roleName = spotIndex < existingRoles.length
+                    ? existingRoles[spotIndex].name
+                    : `Role ${spotIndex + 1}`;
+                const newMessage = {
+                    role: roleName,
+                    content: messageContent,
+                    spotIndex,
+                    timestamp: Date.now(),
+                };
+                updatedMessages.push(newMessage);
+                console.log(`[Binary Storage] Stored message for role "${roleName}":`, newMessage);
+            }
+            const result = await storageManager.storeToBinary(updatedMessages, existingRoles, newSpotCount);
+            returnData.push(result);
+        }
+        else if (mode === 'retrieve') {
+            if (!((_b = items[0]) === null || _b === void 0 ? void 0 : _b.binary)) {
+                throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), 'No binary input data found. Please connect a node that provides binary data.');
+            }
+            const binaryInputProperty = executeFunctions.getNodeParameter('binaryInputProperty', 0, 'data');
+            const loadedData = await storageManager.loadFromBinary(items[0].binary);
+            const outputFormat = executeFunctions.getNodeParameter('outputFormat', 0);
+            const simplifyOutput = executeFunctions.getNodeParameter('simplifyOutput', 0, true);
+            const maxMessages = executeFunctions.getNodeParameter('maxMessages', 0, 0);
+            let filteredMessages = loadedData.messages;
+            if (maxMessages > 0 && filteredMessages.length > maxMessages) {
+                filteredMessages = filteredMessages.slice(-maxMessages);
+            }
+            if (outputFormat === 'array') {
+                processArrayOutput(returnData, filteredMessages, loadedData.roles, loadedData.lastUpdated, simplifyOutput);
+            }
+            else if (outputFormat === 'object') {
+                processObjectOutput(returnData, filteredMessages, loadedData.roles, loadedData.lastUpdated, simplifyOutput);
+            }
+            else if (outputFormat === 'conversationHistory') {
+                const includeSystemPrompt = executeFunctions.getNodeParameter('includeSystemPrompt', 0, false);
+                const systemPromptPosition = includeSystemPrompt
+                    ? executeFunctions.getNodeParameter('systemPromptPosition', 0, 'start')
+                    : 'none';
+                const systemPrompt = includeSystemPrompt
+                    ? executeFunctions.getNodeParameter('systemPrompt', 0, '')
+                    : '';
+                const llmPlatform = executeFunctions.getNodeParameter('llmPlatform', 0, 'generic');
+                if (llmPlatform === 'openai') {
+                    formatOpenAIConversation(returnData, filteredMessages, systemPrompt, includeSystemPrompt, systemPromptPosition, loadedData.lastUpdated, simplifyOutput, loadedData.roles);
+                }
+                else if (llmPlatform === 'anthropic') {
+                    formatAnthropicConversation(returnData, filteredMessages, systemPrompt, includeSystemPrompt, loadedData.lastUpdated, simplifyOutput);
+                }
+                else if (llmPlatform === 'google') {
+                    formatGoogleConversation(returnData, filteredMessages, systemPrompt, includeSystemPrompt, systemPromptPosition, loadedData.lastUpdated, simplifyOutput, loadedData.roles);
+                }
+                else {
+                    formatGenericConversation(returnData, filteredMessages, systemPrompt, includeSystemPrompt, systemPromptPosition, loadedData.lastUpdated, simplifyOutput, loadedData.roles);
+                }
+            }
+            if (returnData.length === 0) {
+                returnData.push({
+                    json: {
+                        messages: [],
+                        messageCount: 0,
+                        lastUpdated: new Date().toISOString(),
+                        info: 'No messages found in storage'
+                    },
+                });
+            }
+        }
+        else if (mode === 'clear') {
+            const result = await storageManager.storeToBinary([], getDefaultRoles(), 3);
+            returnData.push({
+                json: {
+                    success: true,
+                    operation: 'clear',
+                    storageId,
+                    info: 'All messages cleared',
+                },
+                binary: (result.binary || {}),
+            });
+        }
     }
 }
 exports.RoundRobin = RoundRobin;

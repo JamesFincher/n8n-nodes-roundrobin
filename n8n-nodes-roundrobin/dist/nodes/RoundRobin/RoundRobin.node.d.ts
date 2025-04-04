@@ -36,6 +36,7 @@ export declare class RoundRobin implements INodeType {
     description: INodeTypeDescription;
     private static logPersistenceInfo;
     execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]>;
+    private static handleBinaryStorageExecution;
 }
 export {};
 //# sourceMappingURL=RoundRobin.node.d.ts.map

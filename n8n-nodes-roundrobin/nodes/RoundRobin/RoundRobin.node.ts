@@ -4,8 +4,10 @@ import {
   INodeExecutionData,
   INodeType,
   INodeTypeDescription,
-  IDataObject
+  IDataObject,
+  IBinaryKeyData
 } from 'n8n-workflow';
+import { createStorageManager, ExternalStorageManager } from './ExternalStorage';
 
 interface IRoundRobinMessage {
   role: string;
@@ -205,27 +207,22 @@ export class RoundRobin implements INodeType {
         type: 'options',
         options: [
           {
-            name: 'Store',
+            name: 'Store Messages',
             value: 'store',
-            description: 'Store a message in the round-robin',
-            action: 'Store a message in the round robin',
+            description: 'Store messages in the conversation',
           },
           {
-            name: 'Retrieve',
+            name: 'Retrieve Messages',
             value: 'retrieve',
-            description: 'Retrieve all messages from the round-robin',
-            action: 'Retrieve all messages from the round robin',
+            description: 'Retrieve stored messages',
           },
           {
-            name: 'Clear',
+            name: 'Clear All Messages',
             value: 'clear',
             description: 'Clear all stored messages',
-            action: 'Clear all stored messages',
           },
         ],
         default: 'store',
-        noDataExpression: true,
-        required: true,
         description: 'The operation to perform',
       },
       // Notice to explain storage limitations
@@ -535,6 +532,38 @@ export class RoundRobin implements INodeType {
         description: 'Maximum number of messages to return (0 for all messages)',
       },
       {
+        displayName: 'Storage Persistence',
+        name: 'storagePersistence',
+        type: 'options',
+        options: [
+          {
+            name: 'Use Static Data (Requires Trigger)',
+            value: 'staticData',
+            description: 'Store data in n8n static data (requires workflow to be activated with a trigger node)',
+          },
+          {
+            name: 'Use Binary Data (Reliable)',
+            value: 'binary',
+            description: 'Store data in binary output (reliable but requires passing binary data between nodes)',
+          },
+        ],
+        default: 'staticData',
+        description: 'How to persist data between executions',
+      },
+      {
+        displayName: 'Binary Input Property',
+        name: 'binaryInputProperty',
+        type: 'string',
+        default: 'data',
+        displayOptions: {
+          show: {
+            storagePersistence: ['binary'],
+            mode: ['retrieve', 'clear'],
+          },
+        },
+        description: 'Name of the binary property that contains the storage data',
+      },
+      {
         displayName: 'Storage ID',
         name: 'storageId',
         type: 'string',
@@ -573,6 +602,7 @@ For reliable data storage between executions:
     const items = this.getInputData();
     const returnData: INodeExecutionData[] = [];
     const mode = this.getNodeParameter('mode', 0) as string;
+    const storagePersistence = this.getNodeParameter('storagePersistence', 0, 'staticData') as string;
     
     try {
       // Get node name (still useful for logging) and workflow ID
@@ -599,7 +629,15 @@ For reliable data storage between executions:
       }
       
       console.log(`[Execution] Using effective ID for storage: ${workflowId}`);
+      console.log(`[Execution] Storage persistence mode: ${storagePersistence}`);
       
+      // BINARY STORAGE MODE
+      if (storagePersistence === 'binary') {
+        await RoundRobin.handleBinaryStorageExecution(this, items, returnData, mode, workflowId);
+        return [returnData];
+      }
+      
+      // STATIC DATA MODE (Original behavior)
       // Get workflow static data with global context
       const staticData = this.getWorkflowStaticData('global');
       
@@ -770,6 +808,12 @@ For reliable data storage between executions:
       // Final debug log to confirm data persistence using Workflow ID
       console.log('Final storage state - message count:', RoundRobinStorage.getMessages(staticData, workflowId).length);
       
+      // Verify storage persistence after execution
+      if (storagePersistence === 'staticData') {
+        RoundRobinStorage.verifyStoragePersistence(staticData, workflowId);
+      }
+      
+      return [returnData];
     } catch (error) {
       if (error instanceof NodeOperationError) {
         throw error;
@@ -781,8 +825,164 @@ For reliable data storage between executions:
         error instanceof Error ? error.message : 'An unknown error occurred'
       );
     }
+  }
+
+  // New method to handle binary storage execution
+  private static async handleBinaryStorageExecution(
+    executeFunctions: IExecuteFunctions,
+    items: INodeExecutionData[], 
+    returnData: INodeExecutionData[], 
+    mode: string,
+    storageId: string
+  ): Promise<void> {
+    const storageManager = createStorageManager(executeFunctions, 'binary', storageId);
     
-    return [returnData];
+    if (mode === 'store') {
+      const newSpotCount = executeFunctions.getNodeParameter('spotCount', 0) as number;
+      const spotIndex = executeFunctions.getNodeParameter('spotIndex', 0) as number;
+      const inputField = executeFunctions.getNodeParameter('inputField', 0) as string;
+      
+      // Get roles if defined
+      const rolesCollection = executeFunctions.getNodeParameter('roles', 0) as {
+        values?: Array<{ name: string; description: string; color?: string; tone?: string; expertise?: string; systemPrompt?: string; isEnabled?: boolean }>;
+      };
+      
+      // Process roles
+      const updatedRoles = processRoles(rolesCollection);
+      const finalRoles = updatedRoles.length > 0 ? updatedRoles : getDefaultRoles();
+      
+      // Check if we have binary input data to load existing data
+      let existingMessages: any[] = [];
+      let existingRoles = finalRoles;
+      
+      if (items[0]?.binary) {
+        try {
+          const binaryInputProperty = executeFunctions.getNodeParameter('binaryInputProperty', 0, 'data') as string;
+          const loadedData = await storageManager.loadFromBinary(items[0].binary as IDataObject);
+          existingMessages = loadedData.messages || [];
+          
+          // Only use loaded roles if we don't have new ones and there are existing ones
+          if (updatedRoles.length === 0 && loadedData.roles && loadedData.roles.length > 0) {
+            existingRoles = loadedData.roles;
+          }
+        } catch (error) {
+          console.log(`[Binary Storage] Could not load existing data: ${error.message}`);
+        }
+      }
+      
+      // Validate spot index
+      if (spotIndex < 0 || spotIndex >= newSpotCount) {
+        throw new NodeOperationError(executeFunctions.getNode(), `Spot index must be between 0 and ${newSpotCount - 1}`);
+      }
+      
+      // Process all input items
+      const updatedMessages = [...existingMessages]; // Start with existing messages
+      
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        
+        // Extract message content from the item
+        const messageContent = extractMessageContent(item, inputField, i, executeFunctions);
+        
+        // Get role name based on spot index
+        const roleName = spotIndex < existingRoles.length 
+          ? existingRoles[spotIndex].name 
+          : `Role ${spotIndex + 1}`;
+        
+        // Create the message object
+        const newMessage = {
+          role: roleName,
+          content: messageContent,
+          spotIndex,
+          timestamp: Date.now(),
+        };
+        
+        // Add to messages
+        updatedMessages.push(newMessage);
+        
+        console.log(`[Binary Storage] Stored message for role "${roleName}":`, newMessage);
+      }
+      
+      // Store data in binary
+      const result = await storageManager.storeToBinary(updatedMessages, existingRoles, newSpotCount);
+      
+      // Return the result with binary data
+      returnData.push(result as INodeExecutionData);
+      
+    } else if (mode === 'retrieve') {
+      // Check if we have binary input data
+      if (!items[0]?.binary) {
+        throw new NodeOperationError(executeFunctions.getNode(), 'No binary input data found. Please connect a node that provides binary data.');
+      }
+      
+      const binaryInputProperty = executeFunctions.getNodeParameter('binaryInputProperty', 0, 'data') as string;
+      const loadedData = await storageManager.loadFromBinary(items[0].binary as IDataObject);
+      
+      // Get retrieval parameters
+      const outputFormat = executeFunctions.getNodeParameter('outputFormat', 0) as string;
+      const simplifyOutput = executeFunctions.getNodeParameter('simplifyOutput', 0, true) as boolean;
+      const maxMessages = executeFunctions.getNodeParameter('maxMessages', 0, 0) as number;
+      
+      // Filter messages if maxMessages is set
+      let filteredMessages = loadedData.messages;
+      if (maxMessages > 0 && filteredMessages.length > maxMessages) {
+        filteredMessages = filteredMessages.slice(-maxMessages);
+      }
+      
+      // Format output based on outputFormat parameter
+      if (outputFormat === 'array') {
+        processArrayOutput(returnData, filteredMessages, loadedData.roles, loadedData.lastUpdated, simplifyOutput);
+      } else if (outputFormat === 'object') {
+        processObjectOutput(returnData, filteredMessages, loadedData.roles, loadedData.lastUpdated, simplifyOutput);
+      } else if (outputFormat === 'conversationHistory') {
+        const includeSystemPrompt = executeFunctions.getNodeParameter('includeSystemPrompt', 0, false) as boolean;
+        const systemPromptPosition = includeSystemPrompt 
+          ? executeFunctions.getNodeParameter('systemPromptPosition', 0, 'start') as string
+          : 'none';
+        const systemPrompt = includeSystemPrompt 
+          ? executeFunctions.getNodeParameter('systemPrompt', 0, '') as string
+          : '';
+        
+        const llmPlatform = executeFunctions.getNodeParameter('llmPlatform', 0, 'generic') as string;
+        
+        if (llmPlatform === 'openai') {
+          formatOpenAIConversation(returnData, filteredMessages, systemPrompt, includeSystemPrompt, systemPromptPosition, loadedData.lastUpdated, simplifyOutput, loadedData.roles);
+        } else if (llmPlatform === 'anthropic') {
+          formatAnthropicConversation(returnData, filteredMessages, systemPrompt, includeSystemPrompt, loadedData.lastUpdated, simplifyOutput);
+        } else if (llmPlatform === 'google') {
+          formatGoogleConversation(returnData, filteredMessages, systemPrompt, includeSystemPrompt, systemPromptPosition, loadedData.lastUpdated, simplifyOutput, loadedData.roles);
+        } else {
+          formatGenericConversation(returnData, filteredMessages, systemPrompt, includeSystemPrompt, systemPromptPosition, loadedData.lastUpdated, simplifyOutput, loadedData.roles);
+        }
+      }
+      
+      // If there were no messages, add a default output
+      if (returnData.length === 0) {
+        returnData.push({
+          json: {
+            messages: [],
+            messageCount: 0,
+            lastUpdated: new Date().toISOString(),
+            info: 'No messages found in storage'
+          },
+        });
+      }
+      
+    } else if (mode === 'clear') {
+      // Create an empty storage
+      const result = await storageManager.storeToBinary([], getDefaultRoles(), 3);
+      
+      // Return the result with binary data
+      returnData.push({
+        json: {
+          success: true,
+          operation: 'clear',
+          storageId,
+          info: 'All messages cleared',
+        },
+        binary: (result.binary || {}) as IBinaryKeyData,
+      });
+    }
   }
 }
 
