@@ -27,15 +27,87 @@ interface IRoundRobinRole {
   isEnabled?: boolean;
 }
 
-// Define the structure of our node's static data
-interface IStaticData extends IDataObject {
-  messages: IRoundRobinMessage[];
-  roles: IRoundRobinRole[];
-  spotCount: number;
-  lastUpdated: number;
-  // Add serialized data properties for more reliable storage
-  _serializedMessages?: string;
-  _serializedRoles?: string;
+// Static data functions to ensure consistent property naming
+export class RoundRobinStorage {
+  // Generate a consistent prefix for this node instance
+  static getPrefix(nodeName: string): string {
+    return `rr_${nodeName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  }
+  
+  // Storage keys
+  static getMessagesKey(nodeName: string): string {
+    return `${this.getPrefix(nodeName)}_messages`;
+  }
+  
+  static getRolesKey(nodeName: string): string {
+    return `${this.getPrefix(nodeName)}_roles`;
+  }
+  
+  static getSpotCountKey(nodeName: string): string {
+    return `${this.getPrefix(nodeName)}_spotCount`;
+  }
+  
+  static getLastUpdatedKey(nodeName: string): string {
+    return `${this.getPrefix(nodeName)}_lastUpdated`;
+  }
+  
+  // Helper functions for accessing storage data
+  static getMessages(staticData: IDataObject, nodeName: string): IRoundRobinMessage[] {
+    const key = this.getMessagesKey(nodeName);
+    return (staticData[key] as IRoundRobinMessage[]) || [];
+  }
+  
+  static setMessages(staticData: IDataObject, nodeName: string, messages: IRoundRobinMessage[]): void {
+    const key = this.getMessagesKey(nodeName);
+    staticData[key] = messages;
+  }
+  
+  static getRoles(staticData: IDataObject, nodeName: string): IRoundRobinRole[] {
+    const key = this.getRolesKey(nodeName);
+    return (staticData[key] as IRoundRobinRole[]) || [];
+  }
+  
+  static setRoles(staticData: IDataObject, nodeName: string, roles: IRoundRobinRole[]): void {
+    const key = this.getRolesKey(nodeName);
+    staticData[key] = roles;
+  }
+  
+  static getSpotCount(staticData: IDataObject, nodeName: string): number {
+    const key = this.getSpotCountKey(nodeName);
+    return (staticData[key] as number) || 0;
+  }
+  
+  static setSpotCount(staticData: IDataObject, nodeName: string, count: number): void {
+    const key = this.getSpotCountKey(nodeName);
+    staticData[key] = count;
+  }
+  
+  static getLastUpdated(staticData: IDataObject, nodeName: string): number {
+    const key = this.getLastUpdatedKey(nodeName);
+    return (staticData[key] as number) || Date.now();
+  }
+  
+  static setLastUpdated(staticData: IDataObject, nodeName: string, timestamp: number): void {
+    const key = this.getLastUpdatedKey(nodeName);
+    staticData[key] = timestamp;
+  }
+  
+  // Initialize storage for a node
+  static initializeStorage(staticData: IDataObject, nodeName: string): void {
+    if (!this.getMessages(staticData, nodeName).length) {
+      this.setMessages(staticData, nodeName, []);
+    }
+    
+    if (!this.getRoles(staticData, nodeName).length) {
+      this.setRoles(staticData, nodeName, []);
+    }
+    
+    if (!this.getSpotCount(staticData, nodeName)) {
+      this.setSpotCount(staticData, nodeName, 0);
+    }
+    
+    this.setLastUpdated(staticData, nodeName, Date.now());
+  }
 }
 
 // Define interfaces for our output data
@@ -424,164 +496,87 @@ export class RoundRobin implements INodeType {
     const mode = this.getNodeParameter('mode', 0) as string;
     
     try {
-      // Get unique node identifier for persistent storage
-      const nodeId = this.getNode().name;
+      // Get node name for storage isolation
+      const nodeName = this.getNode().name;
       
-      // Initialize or get existing workflow static data with proper typing
-      const staticData = this.getWorkflowStaticData(nodeId) as IStaticData;
+      // Get workflow static data with correct context
+      const staticData = this.getWorkflowStaticData('node');
+      
+      // Initialize storage for this node instance
+      RoundRobinStorage.initializeStorage(staticData, nodeName);
       
       // Log initial state for debugging
       console.log('RoundRobin node executing in mode:', mode);
-      console.log(`Node ID for storage: ${nodeId}`);
-      console.log('Initial staticData keys:', Object.keys(staticData));
+      console.log(`Node instance: ${nodeName}`);
       
-      // Reconstruct data from serialized form if available
-      if (staticData._serializedMessages && (!staticData.messages || !Array.isArray(staticData.messages))) {
-        try {
-          staticData.messages = JSON.parse(staticData._serializedMessages);
-          console.log('Reconstructed messages from serialized data, count:', staticData.messages.length);
-        } catch (e) {
-          console.error('Failed to parse serialized messages:', e);
-          staticData.messages = [];
-        }
-      }
+      // Get current data values
+      const messages = RoundRobinStorage.getMessages(staticData, nodeName);
+      const roles = RoundRobinStorage.getRoles(staticData, nodeName);
+      const spotCount = RoundRobinStorage.getSpotCount(staticData, nodeName);
+      const lastUpdated = RoundRobinStorage.getLastUpdated(staticData, nodeName);
       
-      if (staticData._serializedRoles && (!staticData.roles || !Array.isArray(staticData.roles))) {
-        try {
-          staticData.roles = JSON.parse(staticData._serializedRoles);
-          console.log('Reconstructed roles from serialized data, count:', staticData.roles.length);
-        } catch (e) {
-          console.error('Failed to parse serialized roles:', e);
-          staticData.roles = [];
-        }
-      }
-      
-      // Initialize storage properties if they don't exist
-      if (!staticData.messages || !Array.isArray(staticData.messages)) staticData.messages = [];
-      if (!staticData.roles || !Array.isArray(staticData.roles)) staticData.roles = [];
-      if (typeof staticData.spotCount !== 'number') staticData.spotCount = 0;
-      if (typeof staticData.lastUpdated !== 'number') staticData.lastUpdated = Date.now();
+      console.log('Current message count:', messages.length);
+      console.log('Current roles count:', roles.length);
       
       // Mode specific operations
       if (mode === 'store') {
-        const spotCount = this.getNodeParameter('spotCount', 0) as number;
+        const newSpotCount = this.getNodeParameter('spotCount', 0) as number;
         const spotIndex = this.getNodeParameter('spotIndex', 0) as number;
         const inputField = this.getNodeParameter('inputField', 0) as string;
         
         // Update spot count in storage
-        staticData.spotCount = spotCount;
+        RoundRobinStorage.setSpotCount(staticData, nodeName, newSpotCount);
         
         // Get roles if defined
         const rolesCollection = this.getNodeParameter('roles', 0) as {
           values?: Array<{ name: string; description: string; color?: string; tone?: string; expertise?: string; systemPrompt?: string; isEnabled?: boolean }>;
         };
         
-        if (rolesCollection.values && rolesCollection.values.length) {
-          staticData.roles = rolesCollection.values.map(role => ({
-            name: role.name,
-            description: role.description || '',
-            color: role.color || '#ff9900',
-            tone: role.tone || 'neutral',
-            expertise: typeof role.expertise === 'string' 
-              ? role.expertise.split(',').map(item => item.trim()) 
-              : (Array.isArray(role.expertise) ? role.expertise : []),
-            systemPrompt: role.systemPrompt || '',
-            isEnabled: role.isEnabled !== undefined ? role.isEnabled : true,
-          }));
-        } else if (!staticData.roles.length) {
+        // Process and update roles
+        const updatedRoles: IRoundRobinRole[] = processRoles(rolesCollection);
+        if (updatedRoles.length > 0) {
+          RoundRobinStorage.setRoles(staticData, nodeName, updatedRoles);
+        } else if (roles.length === 0) {
           // Initialize with default roles if not set
-          staticData.roles = [
-            { 
-              name: 'User', 
-              description: 'The human user in the conversation',
-              color: '#6E9BF7',
-              isEnabled: true,
-              expertise: []
-            },
-            { 
-              name: 'Assistant', 
-              description: 'The AI assistant in the conversation',
-              color: '#9E78FF',
-              isEnabled: true,
-              expertise: []
-            },
-            { 
-              name: 'System', 
-              description: 'System instructions for the AI model',
-              color: '#FF9900',
-              isEnabled: true,
-              systemPrompt: 'You are a helpful, friendly AI assistant.',
-              expertise: []
-            }
-          ];
+          const defaultRoles = getDefaultRoles();
+          RoundRobinStorage.setRoles(staticData, nodeName, defaultRoles);
         }
-
+        
+        // Get current roles after possible update
+        const currentRoles = RoundRobinStorage.getRoles(staticData, nodeName);
+        
         // Validate spot index
-        if (spotIndex < 0 || spotIndex >= spotCount) {
-          throw new NodeOperationError(this.getNode(), `Spot index must be between 0 and ${spotCount - 1}`);
+        if (spotIndex < 0 || spotIndex >= newSpotCount) {
+          throw new NodeOperationError(this.getNode(), `Spot index must be between 0 and ${newSpotCount - 1}`);
         }
-
-        // Store messages from all items
+        
+        // Process all input items
+        const updatedMessages = [...messages];
+        
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
           
-          // Safely extract the input field value with better error handling
-          let messageContent: string;
-          try {
-            // First, check if the field exists directly
-            if (item.json[inputField] !== undefined) {
-              messageContent = String(item.json[inputField]);
-            } 
-            // Then check if it's a JSON path expression
-            else if (inputField.includes('$json')) {
-              // Try to extract field name from expression like {{ $json.output }}
-              const fieldMatch = inputField.match(/\{\{\s*\$json\.([a-zA-Z0-9_]+)\s*\}\}/);
-              if (fieldMatch && fieldMatch[1] && item.json[fieldMatch[1]] !== undefined) {
-                messageContent = String(item.json[fieldMatch[1]]);
-              } else {
-                // If we can't find the field by path, try the first available property
-                const keys = Object.keys(item.json);
-                if (keys.length > 0) {
-                  messageContent = String(item.json[keys[0]]);
-                } else {
-                  throw new Error(`No data available in item #${i + 1}`);
-                }
-              }
-            } 
-            // Finally, try the first field as a fallback
-            else {
-              const keys = Object.keys(item.json);
-              if (keys.length > 0) {
-                messageContent = String(item.json[keys[0]]);
-              } else {
-                throw new Error(`Item #${i + 1} does not contain any data`);
-              }
-            }
-          } catch (error) {
-            throw new NodeOperationError(
-              this.getNode(),
-              `Failed to extract input data: ${error.message}`
-            );
-          }
+          // Extract message content from the item
+          const messageContent = extractMessageContent(item, inputField, i, this);
           
           // Get role name based on spot index
-          const roleName = spotIndex < staticData.roles.length 
-            ? staticData.roles[spotIndex].name 
+          const roleName = spotIndex < currentRoles.length 
+            ? currentRoles[spotIndex].name 
             : `Role ${spotIndex + 1}`;
           
           // Create the message object
-          const newMessage = {
+          const newMessage: IRoundRobinMessage = {
             role: roleName,
             content: messageContent,
             spotIndex,
             timestamp: Date.now(),
           };
           
-          // Store the message
-          staticData.messages.push(newMessage);
+          // Add to messages
+          updatedMessages.push(newMessage);
           
           console.log(`Stored message for role "${roleName}":`, newMessage);
-          console.log(`Total messages stored: ${staticData.messages.length}`);
+          console.log(`Total messages stored: ${updatedMessages.length}`);
           
           // Pass through the item with additional metadata
           returnData.push({
@@ -590,7 +585,7 @@ export class RoundRobin implements INodeType {
               roundRobinRole: roleName,
               roundRobinSpotIndex: spotIndex,
               roundRobinStored: true,
-              messageCount: staticData.messages.length,
+              messageCount: updatedMessages.length,
             },
             pairedItem: {
               item: i,
@@ -598,16 +593,9 @@ export class RoundRobin implements INodeType {
           });
         }
         
-        // Update lastUpdated timestamp
-        staticData.lastUpdated = Date.now();
-        
-        // Serialize the data for more reliable storage
-        try {
-          staticData._serializedMessages = JSON.stringify(staticData.messages);
-          staticData._serializedRoles = JSON.stringify(staticData.roles);
-        } catch (e) {
-          console.error('Failed to serialize data:', e);
-        }
+        // Update messages in storage
+        RoundRobinStorage.setMessages(staticData, nodeName, updatedMessages);
+        RoundRobinStorage.setLastUpdated(staticData, nodeName, Date.now());
         
       } else if (mode === 'retrieve') {
         const outputFormat = this.getNodeParameter('outputFormat', 0) as string;
@@ -616,237 +604,48 @@ export class RoundRobin implements INodeType {
         
         // Debug messages
         console.log('Retrieving messages from storage');
-        console.log('Total messages stored:', staticData.messages?.length || 0);
-        console.log('Storage data keys:', Object.keys(staticData));
+        console.log('Total messages stored:', messages.length);
         
-        if (!staticData.messages || staticData.messages.length === 0) {
+        if (messages.length === 0) {
           // No messages stored yet
           console.log('No messages found in storage');
           returnData.push({
             json: {
               status: 'warning',
               message: 'No messages found in storage. Use "store" mode first.',
-              storageKeys: Object.keys(staticData),
-              lastUpdated: staticData.lastUpdated ? new Date(staticData.lastUpdated).toISOString() : null,
+              lastUpdated: lastUpdated ? new Date(lastUpdated).toISOString() : null,
             },
           });
           return [returnData];
         }
         
-        let messages = JSON.parse(JSON.stringify(staticData.messages)); // Deep clone for safety
+        // Create a copy of messages for processing
+        let messagesToProcess = [...messages];
         
         // Apply maximum message limit if specified
-        if (maxMessages > 0 && messages.length > maxMessages) {
-          messages = messages.slice(-maxMessages);
+        if (maxMessages > 0 && messagesToProcess.length > maxMessages) {
+          messagesToProcess = messagesToProcess.slice(-maxMessages);
         }
         
-        // Format output based on chosen format
+        // Process based on output format
         if (outputFormat === 'array') {
-          // Return an array of all messages
-          const outputJson: IDataObject = {
-            messages: simplifyOutput 
-              ? messages.map(m => ({ role: m.role, content: m.content }))
-              : messages,
-            messageCount: messages.length,
-            lastUpdated: new Date(staticData.lastUpdated).toISOString(),
-          };
-          
-          if (!simplifyOutput) {
-            // Add more metadata if not simplifying
-            outputJson.roles = JSON.parse(JSON.stringify(staticData.roles));
-          }
-          
-          returnData.push({ json: outputJson });
-          
+          processArrayOutput(returnData, messagesToProcess, roles, lastUpdated, simplifyOutput);
         } else if (outputFormat === 'object') {
-          // Return messages grouped by role
-          const messagesByRole: { [key: string]: any[] } = {};
-          
-          for (const message of messages) {
-            const roleName = message.role || `Role ${message.spotIndex + 1}`;
-            if (!messagesByRole[roleName]) {
-              messagesByRole[roleName] = [];
-            }
-            
-            if (simplifyOutput) {
-              messagesByRole[roleName].push(message.content);
-            } else {
-              messagesByRole[roleName].push(message);
-            }
-          }
-          
-          const outputJson: IDataObject = {
-            messagesByRole,
-            messageCount: messages.length,
-            lastUpdated: new Date(staticData.lastUpdated).toISOString(),
-          };
-          
-          if (!simplifyOutput) {
-            // Add more metadata if not simplifying
-            outputJson.roles = JSON.parse(JSON.stringify(staticData.roles));
-          }
-          
-          returnData.push({ json: outputJson });
-          
+          processObjectOutput(returnData, messagesToProcess, roles, lastUpdated, simplifyOutput);
         } else if (outputFormat === 'conversationHistory') {
-          // Get parameters
-          const llmPlatform = this.getNodeParameter('llmPlatform', 0, 'openai') as string;
-          const includeSystemPrompt = this.getNodeParameter('includeSystemPrompt', 0, true) as boolean;
-          const systemPromptPosition = this.getNodeParameter('systemPromptPosition', 0, 'start') as string;
-          
-          // Find system role data
-          const systemRole = staticData.roles.find(role => role.name.toLowerCase() === 'system');
-          const systemPrompt = systemRole?.systemPrompt || 'You are a helpful, friendly AI assistant.';
-          
-          // Filter out disabled roles if needed
-          const enabledMessages = messages.filter(msg => {
-            const role = staticData.roles.find(r => r.name === msg.role);
-            return role?.isEnabled !== false; // If not explicitly disabled, include it
-          });
-          
-          // Format based on LLM platform
-          let conversationHistory: any[] = [];
-          
-          if (llmPlatform === 'openai') {
-            // OpenAI format: { role, content }
-            if (includeSystemPrompt && systemPromptPosition === 'start') {
-              conversationHistory.push({
-                role: 'system',
-                content: systemPrompt,
-              });
-            }
-            
-            conversationHistory = [
-              ...conversationHistory,
-              ...enabledMessages.map(message => {
-                // Map role names to OpenAI expected format
-                let role = message.role.toLowerCase();
-                if (role === 'user' || role === 'human') role = 'user';
-                if (role === 'assistant' || role === 'ai') role = 'assistant';
-                if (role === 'system' || role === 'instructions') role = 'system';
-                
-                return {
-                  role,
-                  content: message.content,
-                };
-              }),
-            ];
-            
-            if (includeSystemPrompt && systemPromptPosition === 'end') {
-              conversationHistory.push({
-                role: 'system',
-                content: systemPrompt,
-              });
-            }
-          } 
-          else if (llmPlatform === 'anthropic') {
-            // Anthropic Claude format: textual format with \n\nHuman: and \n\nAssistant:
-            let claudeFormat = '';
-            
-            if (includeSystemPrompt) {
-              claudeFormat += `\n\nSystem: ${systemPrompt}\n\n`;
-            }
-            
-            for (const message of enabledMessages) {
-              let role = message.role.toLowerCase();
-              if (role === 'user' || role === 'human') role = 'Human';
-              else if (role === 'assistant' || role === 'ai') role = 'Assistant';
-              else if (role === 'system') continue; // Skip system messages in the main loop for Claude
-              
-              claudeFormat += `\n\n${role}: ${message.content}`;
-            }
-            
-            // For Claude, return a different structure
-            const outputJson: IDataObject = {
-              claudeFormat: claudeFormat.trim(),
-              messageCount: enabledMessages.length,
-            };
-            
-            if (!simplifyOutput) {
-              outputJson.messages = enabledMessages;
-              outputJson.lastUpdated = new Date(staticData.lastUpdated).toISOString();
-            }
-            
-            returnData.push({ json: outputJson });
-            return [returnData]; // Early return for Claude format
-          }
-          else if (llmPlatform === 'google') {
-            // Google format: similar to OpenAI but with different role naming
-            if (includeSystemPrompt && systemPromptPosition === 'start') {
-              conversationHistory.push({
-                role: 'system',
-                content: systemPrompt,
-              });
-            }
-            
-            conversationHistory = [
-              ...conversationHistory,
-              ...enabledMessages.map(message => {
-                // Map role names to Google expected format
-                let role = message.role.toLowerCase();
-                if (role === 'user' || role === 'human') role = 'user';
-                if (role === 'assistant' || role === 'ai' || role === 'bot') role = 'model';
-                if (role === 'system' || role === 'instructions') role = 'system';
-                
-                return {
-                  role,
-                  content: message.content,
-                };
-              }),
-            ];
-            
-            if (includeSystemPrompt && systemPromptPosition === 'end') {
-              conversationHistory.push({
-                role: 'system',
-                content: systemPrompt,
-              });
-            }
-          } 
-          else {
-            // Generic format: use as-is with lowercase roles
-            if (includeSystemPrompt && systemPromptPosition === 'start') {
-              conversationHistory.push({
-                role: 'system',
-                content: systemPrompt,
-              });
-            }
-            
-            conversationHistory = [
-              ...conversationHistory,
-              ...enabledMessages.map(message => ({
-                role: message.role.toLowerCase(),
-                content: message.content,
-              })),
-            ];
-            
-            if (includeSystemPrompt && systemPromptPosition === 'end') {
-              conversationHistory.push({
-                role: 'system',
-                content: systemPrompt,
-              });
-            }
-          }
-          
-          // Prepare the output
-          const outputJson: IDataObject = {
-            conversationHistory,
-            messageCount: conversationHistory.length,
-          };
-          
-          if (!simplifyOutput) {
-            outputJson.lastUpdated = new Date(staticData.lastUpdated).toISOString();
-            outputJson.platform = llmPlatform;
-            outputJson.roles = JSON.parse(JSON.stringify(staticData.roles));
-          }
-          
-          returnData.push({ json: outputJson });
+          processConversationHistoryOutput(
+            this,
+            returnData,
+            messagesToProcess,
+            roles,
+            lastUpdated,
+            simplifyOutput
+          );
         }
       } else if (mode === 'clear') {
-        // Reset storage data - direct property assignment
-        staticData.messages = [];
-        staticData._serializedMessages = JSON.stringify([]);
-        staticData._serializedRoles = JSON.stringify(staticData.roles); // Preserve roles
-        staticData.lastUpdated = Date.now();
+        // Reset messages but keep roles
+        RoundRobinStorage.setMessages(staticData, nodeName, []);
+        RoundRobinStorage.setLastUpdated(staticData, nodeName, Date.now());
         
         console.log('Storage cleared successfully');
         
@@ -860,15 +659,7 @@ export class RoundRobin implements INodeType {
       }
       
       // Final debug log to confirm data persistence
-      console.log('Final storage state - message count:', staticData.messages.length);
-      
-      // Always update serialized data before finishing execution
-      try {
-        staticData._serializedMessages = JSON.stringify(staticData.messages);
-        staticData._serializedRoles = JSON.stringify(staticData.roles);
-      } catch (e) {
-        console.error('Failed to serialize data at end of execution:', e);
-      }
+      console.log('Final storage state - message count:', RoundRobinStorage.getMessages(staticData, nodeName).length);
       
     } catch (error) {
       if (error instanceof NodeOperationError) {
@@ -884,4 +675,420 @@ export class RoundRobin implements INodeType {
     
     return [returnData];
   }
+}
+
+// Helper functions
+
+function processRoles(rolesCollection: { values?: any[] }): IRoundRobinRole[] {
+  if (!rolesCollection.values || !rolesCollection.values.length) {
+    return [];
+  }
+  
+  return rolesCollection.values.map(role => ({
+    name: role.name,
+    description: role.description || '',
+    color: role.color || '#ff9900',
+    tone: role.tone || 'neutral',
+    expertise: typeof role.expertise === 'string' 
+      ? role.expertise.split(',').map((item: string) => item.trim()) 
+      : (Array.isArray(role.expertise) ? role.expertise : []),
+    systemPrompt: role.systemPrompt || '',
+    isEnabled: role.isEnabled !== undefined ? role.isEnabled : true,
+  }));
+}
+
+function getDefaultRoles(): IRoundRobinRole[] {
+  return [
+    { 
+      name: 'User', 
+      description: 'The human user in the conversation',
+      color: '#6E9BF7',
+      isEnabled: true,
+      expertise: []
+    },
+    { 
+      name: 'Assistant', 
+      description: 'The AI assistant in the conversation',
+      color: '#9E78FF',
+      isEnabled: true,
+      expertise: []
+    },
+    { 
+      name: 'System', 
+      description: 'System instructions for the AI model',
+      color: '#FF9900',
+      isEnabled: true,
+      systemPrompt: 'You are a helpful, friendly AI assistant.',
+      expertise: []
+    }
+  ];
+}
+
+function extractMessageContent(
+  item: INodeExecutionData, 
+  inputField: string, 
+  itemIndex: number,
+  executeFunctions: IExecuteFunctions
+): string {
+  try {
+    // First, check if the field exists directly
+    if (item.json[inputField] !== undefined) {
+      return String(item.json[inputField]);
+    } 
+    // Then check if it's a JSON path expression
+    else if (inputField.includes('$json')) {
+      // Try to extract field name from expression like {{ $json.output }}
+      const fieldMatch = inputField.match(/\{\{\s*\$json\.([a-zA-Z0-9_]+)\s*\}\}/);
+      if (fieldMatch && fieldMatch[1] && item.json[fieldMatch[1]] !== undefined) {
+        return String(item.json[fieldMatch[1]]);
+      } else {
+        // If we can't find the field by path, try the first available property
+        const keys = Object.keys(item.json);
+        if (keys.length > 0) {
+          return String(item.json[keys[0]]);
+        } else {
+          throw new Error(`No data available in item #${itemIndex + 1}`);
+        }
+      }
+    } 
+    // Finally, try the first field as a fallback
+    else {
+      const keys = Object.keys(item.json);
+      if (keys.length > 0) {
+        return String(item.json[keys[0]]);
+      } else {
+        throw new Error(`Item #${itemIndex + 1} does not contain any data`);
+      }
+    }
+  } catch (error) {
+    throw new NodeOperationError(
+      executeFunctions.getNode(),
+      `Failed to extract input data: ${error.message}`
+    );
+  }
+}
+
+function processArrayOutput(
+  returnData: INodeExecutionData[],
+  messages: IRoundRobinMessage[],
+  roles: IRoundRobinRole[],
+  lastUpdated: number,
+  simplifyOutput: boolean
+): void {
+  const outputJson: IDataObject = {
+    messages: simplifyOutput 
+      ? messages.map(m => ({ role: m.role, content: m.content }))
+      : messages,
+    messageCount: messages.length,
+    lastUpdated: new Date(lastUpdated).toISOString(),
+  };
+  
+  if (!simplifyOutput) {
+    outputJson.roles = roles;
+  }
+  
+  returnData.push({ json: outputJson });
+}
+
+function processObjectOutput(
+  returnData: INodeExecutionData[],
+  messages: IRoundRobinMessage[],
+  roles: IRoundRobinRole[],
+  lastUpdated: number,
+  simplifyOutput: boolean
+): void {
+  const messagesByRole: { [key: string]: any[] } = {};
+  
+  for (const message of messages) {
+    const roleName = message.role || `Role ${message.spotIndex + 1}`;
+    if (!messagesByRole[roleName]) {
+      messagesByRole[roleName] = [];
+    }
+    
+    if (simplifyOutput) {
+      messagesByRole[roleName].push(message.content);
+    } else {
+      messagesByRole[roleName].push(message);
+    }
+  }
+  
+  const outputJson: IDataObject = {
+    messagesByRole,
+    messageCount: messages.length,
+    lastUpdated: new Date(lastUpdated).toISOString(),
+  };
+  
+  if (!simplifyOutput) {
+    outputJson.roles = roles;
+  }
+  
+  returnData.push({ json: outputJson });
+}
+
+function processConversationHistoryOutput(
+  executeFunctions: IExecuteFunctions,
+  returnData: INodeExecutionData[],
+  messages: IRoundRobinMessage[],
+  roles: IRoundRobinRole[],
+  lastUpdated: number,
+  simplifyOutput: boolean
+): void {
+  // Get parameters
+  const llmPlatform = executeFunctions.getNodeParameter('llmPlatform', 0, 'openai') as string;
+  const includeSystemPrompt = executeFunctions.getNodeParameter('includeSystemPrompt', 0, true) as boolean;
+  const systemPromptPosition = executeFunctions.getNodeParameter('systemPromptPosition', 0, 'start') as string;
+  
+  // Find system role data
+  const systemRole = roles.find(role => role.name.toLowerCase() === 'system');
+  const systemPrompt = systemRole?.systemPrompt || 'You are a helpful, friendly AI assistant.';
+  
+  // Filter out disabled roles if needed
+  const enabledMessages = messages.filter(msg => {
+    const role = roles.find(r => r.name === msg.role);
+    return role?.isEnabled !== false; // If not explicitly disabled, include it
+  });
+  
+  // Format based on LLM platform
+  if (llmPlatform === 'openai') {
+    formatOpenAIConversation(
+      returnData,
+      enabledMessages,
+      systemPrompt,
+      includeSystemPrompt,
+      systemPromptPosition,
+      lastUpdated,
+      simplifyOutput,
+      roles
+    );
+  } else if (llmPlatform === 'anthropic') {
+    formatAnthropicConversation(
+      returnData,
+      enabledMessages,
+      systemPrompt,
+      includeSystemPrompt,
+      lastUpdated,
+      simplifyOutput
+    );
+  } else if (llmPlatform === 'google') {
+    formatGoogleConversation(
+      returnData,
+      enabledMessages,
+      systemPrompt,
+      includeSystemPrompt,
+      systemPromptPosition,
+      lastUpdated,
+      simplifyOutput,
+      roles
+    );
+  } else {
+    formatGenericConversation(
+      returnData,
+      enabledMessages,
+      systemPrompt,
+      includeSystemPrompt,
+      systemPromptPosition,
+      lastUpdated,
+      simplifyOutput,
+      roles
+    );
+  }
+}
+
+function formatOpenAIConversation(
+  returnData: INodeExecutionData[],
+  messages: IRoundRobinMessage[],
+  systemPrompt: string,
+  includeSystemPrompt: boolean,
+  systemPromptPosition: string,
+  lastUpdated: number,
+  simplifyOutput: boolean,
+  roles: IRoundRobinRole[]
+): void {
+  let conversationHistory: any[] = [];
+  
+  if (includeSystemPrompt && systemPromptPosition === 'start') {
+    conversationHistory.push({
+      role: 'system',
+      content: systemPrompt,
+    });
+  }
+  
+  conversationHistory = [
+    ...conversationHistory,
+    ...messages.map(message => {
+      // Map role names to OpenAI expected format
+      let role = message.role.toLowerCase();
+      if (role === 'user' || role === 'human') role = 'user';
+      if (role === 'assistant' || role === 'ai') role = 'assistant';
+      if (role === 'system' || role === 'instructions') role = 'system';
+      
+      return {
+        role,
+        content: message.content,
+      };
+    }),
+  ];
+  
+  if (includeSystemPrompt && systemPromptPosition === 'end') {
+    conversationHistory.push({
+      role: 'system',
+      content: systemPrompt,
+    });
+  }
+  
+  const outputJson: IDataObject = {
+    conversationHistory,
+    messageCount: conversationHistory.length,
+  };
+  
+  if (!simplifyOutput) {
+    outputJson.lastUpdated = new Date(lastUpdated).toISOString();
+    outputJson.platform = 'openai';
+    outputJson.roles = roles;
+  }
+  
+  returnData.push({ json: outputJson });
+}
+
+function formatAnthropicConversation(
+  returnData: INodeExecutionData[],
+  messages: IRoundRobinMessage[],
+  systemPrompt: string,
+  includeSystemPrompt: boolean,
+  lastUpdated: number,
+  simplifyOutput: boolean
+): void {
+  // Anthropic Claude format: textual format with \n\nHuman: and \n\nAssistant:
+  let claudeFormat = '';
+  
+  if (includeSystemPrompt) {
+    claudeFormat += `\n\nSystem: ${systemPrompt}\n\n`;
+  }
+  
+  for (const message of messages) {
+    let role = message.role.toLowerCase();
+    if (role === 'user' || role === 'human') role = 'Human';
+    else if (role === 'assistant' || role === 'ai') role = 'Assistant';
+    else if (role === 'system') continue; // Skip system messages in the main loop for Claude
+    
+    claudeFormat += `\n\n${role}: ${message.content}`;
+  }
+  
+  // For Claude, return a different structure
+  const outputJson: IDataObject = {
+    claudeFormat: claudeFormat.trim(),
+    messageCount: messages.length,
+  };
+  
+  if (!simplifyOutput) {
+    outputJson.messages = messages;
+    outputJson.lastUpdated = new Date(lastUpdated).toISOString();
+    outputJson.platform = 'anthropic';
+  }
+  
+  returnData.push({ json: outputJson });
+}
+
+function formatGoogleConversation(
+  returnData: INodeExecutionData[],
+  messages: IRoundRobinMessage[],
+  systemPrompt: string,
+  includeSystemPrompt: boolean,
+  systemPromptPosition: string,
+  lastUpdated: number,
+  simplifyOutput: boolean,
+  roles: IRoundRobinRole[]
+): void {
+  let conversationHistory: any[] = [];
+  
+  if (includeSystemPrompt && systemPromptPosition === 'start') {
+    conversationHistory.push({
+      role: 'system',
+      content: systemPrompt,
+    });
+  }
+  
+  conversationHistory = [
+    ...conversationHistory,
+    ...messages.map(message => {
+      // Map role names to Google expected format
+      let role = message.role.toLowerCase();
+      if (role === 'user' || role === 'human') role = 'user';
+      if (role === 'assistant' || role === 'ai' || role === 'bot') role = 'model';
+      if (role === 'system' || role === 'instructions') role = 'system';
+      
+      return {
+        role,
+        content: message.content,
+      };
+    }),
+  ];
+  
+  if (includeSystemPrompt && systemPromptPosition === 'end') {
+    conversationHistory.push({
+      role: 'system',
+      content: systemPrompt,
+    });
+  }
+  
+  const outputJson: IDataObject = {
+    conversationHistory,
+    messageCount: conversationHistory.length,
+  };
+  
+  if (!simplifyOutput) {
+    outputJson.lastUpdated = new Date(lastUpdated).toISOString();
+    outputJson.platform = 'google';
+    outputJson.roles = roles;
+  }
+  
+  returnData.push({ json: outputJson });
+}
+
+function formatGenericConversation(
+  returnData: INodeExecutionData[],
+  messages: IRoundRobinMessage[],
+  systemPrompt: string,
+  includeSystemPrompt: boolean,
+  systemPromptPosition: string,
+  lastUpdated: number,
+  simplifyOutput: boolean,
+  roles: IRoundRobinRole[]
+): void {
+  let conversationHistory: any[] = [];
+  
+  if (includeSystemPrompt && systemPromptPosition === 'start') {
+    conversationHistory.push({
+      role: 'system',
+      content: systemPrompt,
+    });
+  }
+  
+  conversationHistory = [
+    ...conversationHistory,
+    ...messages.map(message => ({
+      role: message.role.toLowerCase(),
+      content: message.content,
+    })),
+  ];
+  
+  if (includeSystemPrompt && systemPromptPosition === 'end') {
+    conversationHistory.push({
+      role: 'system',
+      content: systemPrompt,
+    });
+  }
+  
+  const outputJson: IDataObject = {
+    conversationHistory,
+    messageCount: conversationHistory.length,
+  };
+  
+  if (!simplifyOutput) {
+    outputJson.lastUpdated = new Date(lastUpdated).toISOString();
+    outputJson.platform = 'generic';
+    outputJson.roles = roles;
+  }
+  
+  returnData.push({ json: outputJson });
 } 

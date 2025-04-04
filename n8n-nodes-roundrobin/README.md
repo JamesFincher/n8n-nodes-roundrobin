@@ -158,6 +158,13 @@ Resets all stored messages while preserving role configurations.
 
 ## Version History
 
+### v0.8.0 - Storage System Refactoring
+- Complete refactoring of the storage system for maximum reliability
+- Added proper static data handling with namespace isolation for multiple nodes
+- Split monolithic code into modular functions for better maintainability
+- Improved type safety and error handling throughout the codebase
+- Removed redundant serialization for better performance
+
 ### v0.7.1 - Critical Data Persistence Fix
 - Fixed critical issue with data persistence between node executions
 - Improved static data storage by using unique node identifiers
