@@ -55,7 +55,6 @@ class RoundRobin {
                     required: true,
                     description: 'The operation to perform',
                 },
-                // Airtable Configuration
                 {
                     displayName: 'Airtable Base ID',
                     name: 'baseId',
@@ -80,7 +79,6 @@ class RoundRobin {
                     default: '',
                     description: 'Optional: Set a consistent ID to share storage across multiple node instances. If left empty, workflow ID will be used.',
                 },
-                // Notice to explain storage
                 {
                     displayName: 'Storage Notice',
                     name: 'storageNotice',
@@ -92,7 +90,6 @@ class RoundRobin {
                         },
                     },
                 },
-                // Store mode parameters
                 {
                     displayName: 'Number of Spots',
                     name: 'spotCount',
@@ -244,7 +241,6 @@ class RoundRobin {
                     required: true,
                     hint: '0 = first role, 1 = second role, etc.',
                 },
-                // Example to help users understand the node
                 {
                     displayName: 'Example',
                     name: 'storeExample',
@@ -256,7 +252,6 @@ class RoundRobin {
                         },
                     }
                 },
-                // Retrieve mode parameters
                 {
                     displayName: 'Output Format',
                     name: 'outputFormat',
@@ -286,7 +281,6 @@ class RoundRobin {
                     },
                     description: 'Format of the retrieved messages',
                 },
-                // LLM Platform Selection
                 {
                     displayName: 'LLM Platform',
                     name: 'llmPlatform',
@@ -322,7 +316,6 @@ class RoundRobin {
                     },
                     description: 'Which LLM platform to format the conversation history for',
                 },
-                // System Prompt Options
                 {
                     displayName: 'Include System Prompt',
                     name: 'includeSystemPrompt',
@@ -395,18 +388,13 @@ class RoundRobin {
         const returnData = [];
         const mode = this.getNodeParameter('mode', 0);
         try {
-            // Get node name (for logging) and Airtable credentials
             const nodeName = this.getNode().name;
             const credentials = await this.getCredentials('airtableApi');
             const baseId = this.getNodeParameter('baseId', 0);
             const tableName = this.getNodeParameter('tableName', 0);
-            // Initialize Airtable storage
             const storage = new AirtableStorage_1.AirtableStorage(this, credentials.apiKey, baseId, tableName);
-            // Initialize connection to Airtable
             await storage.initialize();
-            // Determine storage ID (workflow ID or user-specified)
             let workflowId = (_a = this.getWorkflow()) === null || _a === void 0 ? void 0 : _a.id;
-            // Check if user provided a custom storage ID
             const userStorageId = this.getNodeParameter('storageId', 0, '');
             if (userStorageId) {
                 console.log(`[Execution] Using user-provided Storage ID: "${userStorageId}" instead of workflow ID`);
@@ -419,32 +407,23 @@ class RoundRobin {
             console.log(`[Execution] Using effective ID for storage: ${workflowId}`);
             console.log('RoundRobin node executing in mode:', mode);
             console.log(`Node instance: ${nodeName}`);
-            // Mode specific operations
             if (mode === 'store') {
                 const spotCount = this.getNodeParameter('spotCount', 0);
                 const spotIndex = this.getNodeParameter('spotIndex', 0);
                 const inputField = this.getNodeParameter('inputField', 0);
-                // Get roles
                 const rolesCollection = this.getNodeParameter('roles', 0);
                 const roles = processRoles(rolesCollection);
-                // Validate spot index
                 if (spotIndex < 0 || spotIndex >= spotCount) {
                     throw new n8n_workflow_1.NodeOperationError(this.getNode(), `Spot index must be between 0 and ${spotCount - 1}`);
                 }
-                // Process all input items
                 for (let i = 0; i < items.length; i++) {
                     const item = items[i];
-                    // Extract message content from the item
                     const messageContent = extractMessageContent(item, inputField, i, this);
-                    // Get role name based on spot index
                     const roleName = spotIndex < roles.length
                         ? roles[spotIndex].name
                         : `Role ${spotIndex + 1}`;
-                    // Store the message in Airtable
-                    const newMessage = await storage.storeMessage(workflowId, roleName, messageContent, spotIndex, { roles: JSON.stringify(roles) } // Store roles metadata with message
-                    );
+                    const newMessage = await storage.storeMessage(workflowId, roleName, messageContent, spotIndex, { roles: JSON.stringify(roles) });
                     console.log(`Stored message for role "${roleName}":`, newMessage);
-                    // Pass through the item with additional metadata
                     returnData.push({
                         json: {
                             ...item.json,
@@ -463,12 +442,10 @@ class RoundRobin {
                 const outputFormat = this.getNodeParameter('outputFormat', 0);
                 const maxMessages = this.getNodeParameter('maxMessages', 0, 0);
                 const simplifyOutput = this.getNodeParameter('simplifyOutput', 0, true);
-                // Retrieve messages from Airtable
                 const messages = await storage.getMessages(workflowId);
                 console.log('Retrieving messages from storage');
                 console.log('Total messages stored:', messages.length);
                 if (messages.length === 0) {
-                    // No messages stored yet
                     console.log('No messages found in storage');
                     returnData.push({
                         json: {
@@ -479,18 +456,15 @@ class RoundRobin {
                     });
                     return [returnData];
                 }
-                // Extract unique roles from messages
                 const uniqueRoles = Array.from(new Set(messages.map(msg => msg.role)));
                 const roles = uniqueRoles.map(role => ({
                     name: role,
                     description: '',
                 }));
-                // Apply maximum message limit if specified
                 let messagesToProcess = [...messages];
                 if (maxMessages > 0 && messagesToProcess.length > maxMessages) {
                     messagesToProcess = messagesToProcess.slice(-maxMessages);
                 }
-                // Process based on output format
                 if (outputFormat === 'array') {
                     processArrayOutput(returnData, messagesToProcess, roles, Date.now(), simplifyOutput);
                 }
@@ -502,7 +476,6 @@ class RoundRobin {
                 }
             }
             else if (mode === 'clear') {
-                // Clear messages from Airtable
                 const deletedCount = await storage.clearMessages(workflowId);
                 console.log('Storage cleared successfully');
                 returnData.push({
@@ -518,14 +491,12 @@ class RoundRobin {
             if (error instanceof n8n_workflow_1.NodeOperationError) {
                 throw error;
             }
-            // Handle other errors and provide useful information
             throw new n8n_workflow_1.NodeOperationError(this.getNode(), error instanceof Error ? error.message : 'An unknown error occurred');
         }
         return [returnData];
     }
 }
 exports.RoundRobin = RoundRobin;
-// Helper functions
 function processRoles(rolesCollection) {
     if (!rolesCollection.values || !rolesCollection.values.length) {
         return getDefaultRoles();
@@ -570,19 +541,15 @@ function getDefaultRoles() {
 }
 function extractMessageContent(item, inputField, itemIndex, executeFunctions) {
     try {
-        // First, check if the field exists directly
         if (item.json[inputField] !== undefined) {
             return String(item.json[inputField]);
         }
-        // Then check if it's a JSON path expression
         else if (inputField.includes('$json')) {
-            // Try to extract field name from expression like {{ $json.output }}
             const fieldMatch = inputField.match(/\{\{\s*\$json\.([a-zA-Z0-9_]+)\s*\}\}/);
             if (fieldMatch && fieldMatch[1] && item.json[fieldMatch[1]] !== undefined) {
                 return String(item.json[fieldMatch[1]]);
             }
             else {
-                // If we can't find the field by path, try the first available property
                 const keys = Object.keys(item.json);
                 if (keys.length > 0) {
                     return String(item.json[keys[0]]);
@@ -593,7 +560,6 @@ function extractMessageContent(item, inputField, itemIndex, executeFunctions) {
             }
         }
         else {
-            // If not a field name or expression, try the first property
             const keys = Object.keys(item.json);
             if (keys.length > 0) {
                 return String(item.json[keys[0]]);
@@ -607,9 +573,7 @@ function extractMessageContent(item, inputField, itemIndex, executeFunctions) {
         throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), `Failed to extract input data: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
-// These are kept from the original implementation as they handle formatting the output
 function processArrayOutput(returnData, messages, roles, lastUpdated, simplifyOutput) {
-    // Convert to desired output format
     const outputMessages = messages.map(message => {
         if (simplifyOutput) {
             return {
@@ -655,19 +619,15 @@ function processObjectOutput(returnData, messages, roles, lastUpdated, simplifyO
 }
 function processConversationHistoryOutput(executeFunctions, returnData, messages, roles, lastUpdated, simplifyOutput) {
     try {
-        // Get parameters with explicit type casting and default values
         const llmPlatform = String(executeFunctions.getNodeParameter('llmPlatform', 0, 'openai'));
         const includeSystemPrompt = Boolean(executeFunctions.getNodeParameter('includeSystemPrompt', 0, true));
         const systemPromptPosition = String(executeFunctions.getNodeParameter('systemPromptPosition', 0, 'start'));
-        // Find system role data
         const systemRole = roles.find(role => role.name.toLowerCase() === 'system');
         const systemPrompt = (systemRole === null || systemRole === void 0 ? void 0 : systemRole.systemPrompt) || 'You are a helpful, friendly AI assistant.';
-        // Filter out disabled roles if needed
         const enabledMessages = messages.filter(msg => {
             const role = roles.find(r => r.name === msg.role);
-            return (role === null || role === void 0 ? void 0 : role.isEnabled) !== false; // If not explicitly disabled, include it
+            return (role === null || role === void 0 ? void 0 : role.isEnabled) !== false;
         });
-        // Format based on LLM platform
         if (llmPlatform === 'openai') {
             formatOpenAIConversation(returnData, enabledMessages, systemPrompt, includeSystemPrompt, systemPromptPosition, lastUpdated, simplifyOutput, roles);
         }
@@ -682,7 +642,6 @@ function processConversationHistoryOutput(executeFunctions, returnData, messages
         }
     }
     catch (error) {
-        // Provide better error message with context
         throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), `Error in conversation history processing: ${error.message}`);
     }
 }
@@ -697,7 +656,6 @@ function formatOpenAIConversation(returnData, messages, systemPrompt, includeSys
     conversationHistory = [
         ...conversationHistory,
         ...messages.map(message => {
-            // Map role names to OpenAI expected format
             let role = message.role.toLowerCase();
             if (role === 'user' || role === 'human')
                 role = 'user';
@@ -729,7 +687,6 @@ function formatOpenAIConversation(returnData, messages, systemPrompt, includeSys
     returnData.push({ json: outputJson });
 }
 function formatAnthropicConversation(returnData, messages, systemPrompt, includeSystemPrompt, lastUpdated, simplifyOutput) {
-    // Anthropic Claude format: textual format with \n\nHuman: and \n\nAssistant:
     let claudeFormat = '';
     if (includeSystemPrompt) {
         claudeFormat += `\n\nSystem: ${systemPrompt}\n\n`;
@@ -741,10 +698,9 @@ function formatAnthropicConversation(returnData, messages, systemPrompt, include
         else if (role === 'assistant' || role === 'ai')
             role = 'Assistant';
         else if (role === 'system')
-            continue; // Skip system messages in the main loop for Claude
+            continue;
         claudeFormat += `\n\n${role}: ${message.content}`;
     }
-    // For Claude, return a different structure
     const outputJson = {
         claudeFormat: claudeFormat.trim(),
         messageCount: messages.length,
@@ -767,7 +723,6 @@ function formatGoogleConversation(returnData, messages, systemPrompt, includeSys
     conversationHistory = [
         ...conversationHistory,
         ...messages.map(message => {
-            // Map role names to Google expected format
             let role = message.role.toLowerCase();
             if (role === 'user' || role === 'human')
                 role = 'user';
