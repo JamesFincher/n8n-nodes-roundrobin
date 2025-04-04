@@ -158,6 +158,12 @@ Resets all stored messages while preserving role configurations.
 
 ## Version History
 
+### v0.7.1 - Critical Data Persistence Fix
+- Fixed critical issue with data persistence between node executions
+- Improved static data storage by using unique node identifiers
+- Fixed type handling for expertise fields
+- Optimized data structures to ensure reliable storage
+
 ### v0.7.0 - Phase 2: Enhanced Persona System & LLM Integration
 - Added rich persona profiles with tone, expertise, and color
 - Implemented platform-specific formatting for OpenAI, Claude, and Gemini
