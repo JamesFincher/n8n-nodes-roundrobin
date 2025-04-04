@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.9.0 (2024-04-04)
+### Added
+- Added conversation round counter to track conversation turns
+- Added UI to display and limit the number of rounds
+- Added helpful hints and notices for better user experience
+
+### Changed
+- Made binary storage the default and only option for better persistence
+- Improved role configuration with better organization and UI
+- Enhanced storage ID field with clearer explanations
+
 ## v0.8.9 (2024-04-04)
 ### Fixed
 - Fixed TypeScript configuration to properly identify source files

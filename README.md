@@ -6,6 +6,8 @@ This is a custom node for [n8n](https://n8n.io/) that allows you to store and re
 
 - **Store messages** from different roles/personas in a stateful way during workflow execution
 - **Enhanced persona profiles** with tone, expertise areas, colors, and system prompts
+- **Round counter** tracks conversation turns and allows setting limits
+- **Reliable storage** using binary data attachments for persistence
 - **LLM platform integrations** with formatting for OpenAI, Anthropic Claude, and Google Gemini
 - **System prompt management** for guiding AI behavior
 - **Retrieve messages** in various formats (array, object by role, or conversation history for LLMs)
@@ -53,7 +55,7 @@ npm link n8n-nodes-roundrobin
 To install the node globally, run:
 
 ```bash
-npm install -g n8n-nodes-roundrobin@0.8.9
+npm install -g n8n-nodes-roundrobin@0.9.0
 ```
 
 ### Docker Installation
@@ -64,7 +66,7 @@ If you're using Docker to run n8n, you can include this custom node by:
 ```dockerfile
 FROM n8nio/n8n
 
-RUN npm install -g n8n-nodes-roundrobin@0.8.9
+RUN npm install -g n8n-nodes-roundrobin@0.9.0
 ```
 
 2. Building your custom image:
@@ -157,6 +159,12 @@ Resets all stored messages while preserving role configurations.
   - The workflow is updated and redeployed
 
 ## Version History
+
+### v0.9.0 - Storage Improvements & Round Counter
+- Added conversation round counter to track and limit conversation turns
+- Made binary storage the default for better persistence across executions
+- Improved UI with better organization, hints, and notices
+- Enhanced role configuration interface
 
 ### v0.8.9 - Code Quality & Project Structure Improvements
 - Fixed TypeScript configuration for better development experience
