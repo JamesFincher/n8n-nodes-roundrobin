@@ -26,7 +26,8 @@
     "dev": "tsc --watch",
     "lint": "eslint nodes credentials package.json",
     "lintfix": "eslint nodes credentials package.json --fix",
-    "prepublishOnly": "echo 'Skipping build step for now'"
+    "prepare-publish": "node prepare-publish.js",
+    "prepublishOnly": "npm run prepare-publish"
   },
   "files": [
     "dist",
