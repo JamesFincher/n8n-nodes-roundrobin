@@ -1,20 +1,25 @@
 {
   "name": "n8n-nodes-roundrobin",
-  "version": "0.8.4",
-  "description": "n8n node to store and retrieve messages in a round-robin fashion, particularly for LLM conversation loops with multiple personas",
+  "version": "0.9.0",
+  "description": "n8n node to store and retrieve messages in a round-robin fashion, particularly for LLM conversation loops with multiple personas. Uses Airtable for persistent storage.",
   "keywords": [
-    "n8n",
     "n8n-community-node-package",
-    "n8n-node",
+    "n8n",
     "round-robin",
+    "conversation",
+    "chat",
     "llm",
-    "conversation"
+    "openai",
+    "claude",
+    "gemini",
+    "airtable",
+    "persistence"
   ],
   "license": "MIT",
   "homepage": "https://github.com/JamesFincher/n8n-nodes-roundrobin",
   "author": {
     "name": "James Fincher",
-    "email": "heartandkarma@gmail.com"
+    "email": "jamesfincher@finch-ai.com"
   },
   "repository": {
     "type": "git",
@@ -22,37 +27,39 @@
   },
   "main": "index.js",
   "scripts": {
-    "build": "tsc && cp -r nodes/RoundRobin/RoundRobin.node.json dist/nodes/RoundRobin/ && cp -r nodes/RoundRobin/roundrobin.svg dist/nodes/RoundRobin/",
+    "build": "tsc && gulp build:icons",
     "dev": "tsc --watch",
-    "format": "prettier --write \"**/*.ts\"",
-    "lint": "eslint nodes credentials package.json",
-    "lintfix": "eslint nodes credentials package.json --fix",
-    "prepublishOnly": "npm run build"
+    "format": "prettier nodes --write",
+    "lint": "tslint -p tsconfig.json -c tslint.json && eslint nodes package.json",
+    "lintfix": "tslint --fix -p tsconfig.json -c tslint.json && eslint nodes package.json --fix",
+    "prepublishOnly": "npm run build && npm run lint -c .eslintrc.prepublish.js nodes package.json"
   },
   "files": [
-    "dist",
-    "index.js",
-    "README.md",
-    "LICENSE"
+    "dist"
   ],
   "n8n": {
     "n8nNodesApiVersion": 1,
-    "credentials": [],
+    "credentials": [
+      "dist/credentials/AirtableApi.credentials.js"
+    ],
     "nodes": [
       "dist/nodes/RoundRobin/RoundRobin.node.js"
     ]
   },
   "devDependencies": {
-    "@types/express": "^4.17.17",
-    "@types/node": "^18.16.0",
-    "@typescript-eslint/eslint-plugin": "^5.60.0",
-    "@typescript-eslint/parser": "^5.60.0",
-    "eslint": "^8.43.0",
-    "eslint-plugin-n8n-nodes-base": "^1.14.0",
-    "prettier": "^2.8.8",
-    "typescript": "~4.9.5"
+    "@types/express": "^4.17.6",
+    "@types/request-promise-native": "~1.0.15",
+    "@typescript-eslint/parser": "^5.29.0",
+    "eslint-plugin-n8n-nodes-base": "^1.0.0",
+    "gulp": "^4.0.2",
+    "n8n-core": "^0.125.0",
+    "n8n-workflow": "^0.107.0",
+    "prettier": "^2.7.1",
+    "tslint": "^6.1.2",
+    "typescript": "~4.6.0"
   },
   "dependencies": {
+    "axios": "^1.6.7",
     "n8n-core": "^1.0.0",
     "n8n-workflow": "^1.0.0"
   }
