@@ -1,0 +1,12 @@
+src/
+tsconfig.json
+.eslintrc.js
+.prettier*
+.git*
+node_modules/
+*.ts
+!*.d.ts
+.vscode/
+.idea/
+.DS_Store
+scripts/ 
