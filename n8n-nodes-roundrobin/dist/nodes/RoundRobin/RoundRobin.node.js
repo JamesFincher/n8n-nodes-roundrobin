@@ -419,7 +419,7 @@ class RoundRobin {
         const mode = this.getNodeParameter('mode', 0);
         try {
             const nodeName = this.getNode().name;
-            const staticData = this.getWorkflowStaticData('node');
+            const staticData = this.getWorkflowStaticData('global');
             RoundRobinStorage.initializeStorage(staticData, nodeName);
             console.log('RoundRobin node executing in mode:', mode);
             console.log(`Node instance: ${nodeName}`);

@@ -500,7 +500,7 @@ export class RoundRobin implements INodeType {
       const nodeName = this.getNode().name;
       
       // Get workflow static data with correct context
-      const staticData = this.getWorkflowStaticData('node');
+      const staticData = this.getWorkflowStaticData('global');
       
       // Initialize storage for this node instance
       RoundRobinStorage.initializeStorage(staticData, nodeName);

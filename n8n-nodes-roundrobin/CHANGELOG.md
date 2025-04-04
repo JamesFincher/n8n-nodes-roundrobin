@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.2 (2025-03-28)
+### Fixed
+- Improved data persistence between workflow executions by changing from 'node' to 'global' context
+- Fixed issue where messages weren't retrievable after being stored with the same node
+
 ## v0.8.1 (2025-03-28)
 ### Fixed
 - Fixed "Unknown context type" error when retrieving conversation history by adding proper error handling and explicit type conversion in parameter handling
