@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.8.4 (2025-03-28)
+### Fixed
+- Added storage verification to confirm data is properly persisted after saving
+- Added user-configurable Storage ID parameter for explicit control over storage isolation
+- Enhanced diagnostic logging for easier troubleshooting of persistence issues
+
+## v0.8.3 (2025-03-28)
+### Fixed
+- Complete storage system refactoring to use workflow ID instead of node name
+- Added proper fallbacks for environments where workflow ID might be undefined
+- Improved diagnostic logging to identify storage initialization issues
+
 ## v0.8.2 (2025-03-28)
 ### Fixed
 - Improved data persistence between workflow executions by changing from 'node' to 'global' context

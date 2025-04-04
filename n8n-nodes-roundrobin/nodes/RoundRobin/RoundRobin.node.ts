@@ -29,84 +29,131 @@ interface IRoundRobinRole {
 
 // Static data functions to ensure consistent property naming
 export class RoundRobinStorage {
-  // Generate a consistent prefix for this node instance
-  static getPrefix(nodeName: string): string {
-    return `rr_${nodeName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  // Generate a consistent prefix using workflow ID for true global scope within the workflow
+  static getPrefix(workflowId: string): string {
+    // Ensure workflowId is a valid string, fallback if necessary (though should always exist)
+    const safeWorkflowId = String(workflowId || 'default_workflow').replace(/[^a-zA-Z0-9]/g, '_');
+    return `rr_wf_${safeWorkflowId}`;
   }
   
-  // Storage keys
-  static getMessagesKey(nodeName: string): string {
-    return `${this.getPrefix(nodeName)}_messages`;
+  // Storage keys using Workflow ID
+  static getMessagesKey(workflowId: string): string {
+    return `${this.getPrefix(workflowId)}_messages`;
   }
   
-  static getRolesKey(nodeName: string): string {
-    return `${this.getPrefix(nodeName)}_roles`;
+  static getRolesKey(workflowId: string): string {
+    return `${this.getPrefix(workflowId)}_roles`;
   }
   
-  static getSpotCountKey(nodeName: string): string {
-    return `${this.getPrefix(nodeName)}_spotCount`;
+  static getSpotCountKey(workflowId: string): string {
+    return `${this.getPrefix(workflowId)}_spotCount`;
   }
   
-  static getLastUpdatedKey(nodeName: string): string {
-    return `${this.getPrefix(nodeName)}_lastUpdated`;
+  static getLastUpdatedKey(workflowId: string): string {
+    return `${this.getPrefix(workflowId)}_lastUpdated`;
   }
   
-  // Helper functions for accessing storage data
-  static getMessages(staticData: IDataObject, nodeName: string): IRoundRobinMessage[] {
-    const key = this.getMessagesKey(nodeName);
+  // Helper functions for accessing storage data using Workflow ID
+  static getMessages(staticData: IDataObject, workflowId: string): IRoundRobinMessage[] {
+    const key = this.getMessagesKey(workflowId);
+    // Log what key is being used for retrieval
+    console.log(`[Storage] Getting messages with key: ${key}`);
     return (staticData[key] as IRoundRobinMessage[]) || [];
   }
   
-  static setMessages(staticData: IDataObject, nodeName: string, messages: IRoundRobinMessage[]): void {
-    const key = this.getMessagesKey(nodeName);
+  static setMessages(staticData: IDataObject, workflowId: string, messages: IRoundRobinMessage[]): void {
+    const key = this.getMessagesKey(workflowId);
+    // Log what key is being used for setting
+    console.log(`[Storage] Setting messages with key: ${key}, Count: ${messages.length}`);
     staticData[key] = messages;
   }
   
-  static getRoles(staticData: IDataObject, nodeName: string): IRoundRobinRole[] {
-    const key = this.getRolesKey(nodeName);
+  static getRoles(staticData: IDataObject, workflowId: string): IRoundRobinRole[] {
+    const key = this.getRolesKey(workflowId);
+    console.log(`[Storage] Getting roles with key: ${key}`);
     return (staticData[key] as IRoundRobinRole[]) || [];
   }
   
-  static setRoles(staticData: IDataObject, nodeName: string, roles: IRoundRobinRole[]): void {
-    const key = this.getRolesKey(nodeName);
+  static setRoles(staticData: IDataObject, workflowId: string, roles: IRoundRobinRole[]): void {
+    const key = this.getRolesKey(workflowId);
+    console.log(`[Storage] Setting roles with key: ${key}, Count: ${roles.length}`);
     staticData[key] = roles;
   }
   
-  static getSpotCount(staticData: IDataObject, nodeName: string): number {
-    const key = this.getSpotCountKey(nodeName);
+  static getSpotCount(staticData: IDataObject, workflowId: string): number {
+    const key = this.getSpotCountKey(workflowId);
+    console.log(`[Storage] Getting spot count with key: ${key}`);
     return (staticData[key] as number) || 0;
   }
   
-  static setSpotCount(staticData: IDataObject, nodeName: string, count: number): void {
-    const key = this.getSpotCountKey(nodeName);
+  static setSpotCount(staticData: IDataObject, workflowId: string, count: number): void {
+    const key = this.getSpotCountKey(workflowId);
+    console.log(`[Storage] Setting spot count with key: ${key}, Count: ${count}`);
     staticData[key] = count;
   }
   
-  static getLastUpdated(staticData: IDataObject, nodeName: string): number {
-    const key = this.getLastUpdatedKey(nodeName);
+  static getLastUpdated(staticData: IDataObject, workflowId: string): number {
+    const key = this.getLastUpdatedKey(workflowId);
+    console.log(`[Storage] Getting last updated with key: ${key}`);
     return (staticData[key] as number) || Date.now();
   }
   
-  static setLastUpdated(staticData: IDataObject, nodeName: string, timestamp: number): void {
-    const key = this.getLastUpdatedKey(nodeName);
+  static setLastUpdated(staticData: IDataObject, workflowId: string, timestamp: number): void {
+    const key = this.getLastUpdatedKey(workflowId);
+    console.log(`[Storage] Setting last updated with key: ${key}, Timestamp: ${timestamp}`);
     staticData[key] = timestamp;
   }
   
-  // Initialize storage for a node
-  static initializeStorage(staticData: IDataObject, nodeName: string): void {
-    if (!this.getMessages(staticData, nodeName).length) {
-      this.setMessages(staticData, nodeName, []);
+  // Initialize storage for a workflow
+  static initializeStorage(staticData: IDataObject, workflowId: string): void {
+    const existingMessages = this.getMessages(staticData, workflowId);
+    if (existingMessages.length === 0) {
+      console.log(`[Storage Init] No messages found for workflow ${workflowId}. Initializing.`);
+      this.setMessages(staticData, workflowId, []);
+    } else {
+      console.log(`[Storage Init] Found ${existingMessages.length} existing messages for workflow ${workflowId}. No initialization needed.`);
     }
     
-    if (!this.getRoles(staticData, nodeName).length) {
-      this.setRoles(staticData, nodeName, []);
+    const existingRoles = this.getRoles(staticData, workflowId);
+    if (existingRoles.length === 0) {
+       console.log(`[Storage Init] No roles found for workflow ${workflowId}. Initializing.`);
+      this.setRoles(staticData, workflowId, []); // Initialize empty, let store mode add defaults later if needed
+    } else {
+       console.log(`[Storage Init] Found ${existingRoles.length} existing roles for workflow ${workflowId}. No initialization needed.`);
     }
     
-    if (!this.getSpotCount(staticData, nodeName)) {
-      this.setSpotCount(staticData, nodeName, 0);
+    const existingSpotCount = this.getSpotCount(staticData, workflowId); // This getter already defaults to 0
+    if (existingSpotCount === 0 && !staticData[this.getSpotCountKey(workflowId)]) { // Check if it was explicitly 0 or just defaulted
+       console.log(`[Storage Init] No spot count found for workflow ${workflowId}. Initializing to 0.`);
+      this.setSpotCount(staticData, workflowId, 0);
+    } else {
+       console.log(`[Storage Init] Found existing spot count (${existingSpotCount}) for workflow ${workflowId}. No initialization needed.`);
     }
     
-    this.setLastUpdated(staticData, nodeName, Date.now());
+    // Always update last updated timestamp during initialization check
+    console.log(`[Storage Init] Setting/Updating last updated timestamp for workflow ${workflowId}.`);
+    this.setLastUpdated(staticData, workflowId, Date.now());
+  }
+
+  static verifyStoragePersistence(staticData: IDataObject, workflowId: string): void {
+    // Verify messages were saved
+    const messages = this.getMessages(staticData, workflowId);
+    console.log(`[Storage Verify] Message count after save: ${messages.length}. Storage key: ${this.getMessagesKey(workflowId)}`);
+    
+    // Verify all key/value pairs
+    console.log(`[Storage Verify] staticData keys: ${Object.keys(staticData).join(', ')}`);
+    
+    // Log full diagnostic info about storage
+    console.log(`[Storage Verify] Storage diagnostics:`, {
+      messagesKey: this.getMessagesKey(workflowId),
+      rolesKey: this.getRolesKey(workflowId),
+      spotCountKey: this.getSpotCountKey(workflowId),
+      lastUpdatedKey: this.getLastUpdatedKey(workflowId),
+      hasMessagesInStorage: staticData[this.getMessagesKey(workflowId)] !== undefined,
+      messagesCount: messages.length,
+      rolesCount: this.getRoles(staticData, workflowId).length,
+      staticDataSize: JSON.stringify(staticData).length,
+    });
   }
 }
 
@@ -487,6 +534,18 @@ export class RoundRobin implements INodeType {
         },
         description: 'Maximum number of messages to return (0 for all messages)',
       },
+      {
+        displayName: 'Storage ID',
+        name: 'storageId',
+        type: 'string',
+        default: '',
+        displayOptions: {
+          show: {
+            mode: ['store', 'retrieve', 'clear'],
+          },
+        },
+        description: 'Optional: Set a consistent ID to share storage across multiple node instances. If left empty, workflow ID will be used.',
+      },
     ],
   };
 
@@ -496,24 +555,46 @@ export class RoundRobin implements INodeType {
     const mode = this.getNodeParameter('mode', 0) as string;
     
     try {
-      // Get node name for storage isolation
+      // Get node name (still useful for logging) and workflow ID
       const nodeName = this.getNode().name;
+      let workflowId = this.getWorkflow()?.id; // Get the workflow ID using optional chaining
+      console.log(`[Execution] Raw Workflow ID: ${workflowId}`);
+
+      // Ensure workflowId is a valid string before using it for storage keys
+      if (!workflowId) {
+        // This case should be rare, but log a warning and fallback to nodeName
+        // Note: Falling back to nodeName might reintroduce persistence issues if node names differ
+        console.warn(`[Execution] Warning: Workflow ID is undefined. Falling back to node name ('${nodeName}') for storage key. Check n8n environment if persistence issues occur.`);
+        workflowId = nodeName; 
+      } else {
+        // Ensure it's treated as a string type
+        workflowId = String(workflowId);
+      }
       
-      // Get workflow static data with correct context
+      // Check if user provided a custom storage ID
+      const userStorageId = this.getNodeParameter('storageId', 0, '') as string;
+      if (userStorageId) {
+        console.log(`[Execution] Using user-provided Storage ID: "${userStorageId}" instead of workflow ID`);
+        workflowId = userStorageId;
+      }
+      
+      console.log(`[Execution] Using effective ID for storage: ${workflowId}`);
+      
+      // Get workflow static data with global context
       const staticData = this.getWorkflowStaticData('global');
       
-      // Initialize storage for this node instance
-      RoundRobinStorage.initializeStorage(staticData, nodeName);
+      // Initialize storage using Workflow ID
+      RoundRobinStorage.initializeStorage(staticData, workflowId);
       
       // Log initial state for debugging
       console.log('RoundRobin node executing in mode:', mode);
-      console.log(`Node instance: ${nodeName}`);
+      console.log(`Node instance: ${nodeName}`); // Keep logging node name for clarity
       
-      // Get current data values
-      const messages = RoundRobinStorage.getMessages(staticData, nodeName);
-      const roles = RoundRobinStorage.getRoles(staticData, nodeName);
-      const spotCount = RoundRobinStorage.getSpotCount(staticData, nodeName);
-      const lastUpdated = RoundRobinStorage.getLastUpdated(staticData, nodeName);
+      // Get current data values using Workflow ID
+      const messages = RoundRobinStorage.getMessages(staticData, workflowId);
+      const roles = RoundRobinStorage.getRoles(staticData, workflowId);
+      const spotCount = RoundRobinStorage.getSpotCount(staticData, workflowId);
+      const lastUpdated = RoundRobinStorage.getLastUpdated(staticData, workflowId);
       
       console.log('Current message count:', messages.length);
       console.log('Current roles count:', roles.length);
@@ -524,26 +605,28 @@ export class RoundRobin implements INodeType {
         const spotIndex = this.getNodeParameter('spotIndex', 0) as number;
         const inputField = this.getNodeParameter('inputField', 0) as string;
         
-        // Update spot count in storage
-        RoundRobinStorage.setSpotCount(staticData, nodeName, newSpotCount);
+        // Update spot count in storage using Workflow ID
+        RoundRobinStorage.setSpotCount(staticData, workflowId, newSpotCount);
         
         // Get roles if defined
         const rolesCollection = this.getNodeParameter('roles', 0) as {
           values?: Array<{ name: string; description: string; color?: string; tone?: string; expertise?: string; systemPrompt?: string; isEnabled?: boolean }>;
         };
         
-        // Process and update roles
+        // Process and update roles using Workflow ID
         const updatedRoles: IRoundRobinRole[] = processRoles(rolesCollection);
+        // Only update roles if new ones are provided OR if no roles exist yet (use defaults)
+        const currentRolesForInitCheck = RoundRobinStorage.getRoles(staticData, workflowId);
         if (updatedRoles.length > 0) {
-          RoundRobinStorage.setRoles(staticData, nodeName, updatedRoles);
-        } else if (roles.length === 0) {
-          // Initialize with default roles if not set
+          RoundRobinStorage.setRoles(staticData, workflowId, updatedRoles);
+        } else if (currentRolesForInitCheck.length === 0) {
+          // Initialize with default roles if not set and none exist
           const defaultRoles = getDefaultRoles();
-          RoundRobinStorage.setRoles(staticData, nodeName, defaultRoles);
+          RoundRobinStorage.setRoles(staticData, workflowId, defaultRoles);
         }
         
-        // Get current roles after possible update
-        const currentRoles = RoundRobinStorage.getRoles(staticData, nodeName);
+        // Get current roles after possible update using Workflow ID
+        const currentRoles = RoundRobinStorage.getRoles(staticData, workflowId);
         
         // Validate spot index
         if (spotIndex < 0 || spotIndex >= newSpotCount) {
@@ -551,7 +634,9 @@ export class RoundRobin implements INodeType {
         }
         
         // Process all input items
-        const updatedMessages = [...messages];
+        // Read current messages again right before modification in case of concurrent runs
+        const currentMessages = RoundRobinStorage.getMessages(staticData, workflowId);
+        const updatedMessages = [...currentMessages]; // Use the most recent read
         
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
@@ -593,9 +678,12 @@ export class RoundRobin implements INodeType {
           });
         }
         
-        // Update messages in storage
-        RoundRobinStorage.setMessages(staticData, nodeName, updatedMessages);
-        RoundRobinStorage.setLastUpdated(staticData, nodeName, Date.now());
+        // Update messages in storage using Workflow ID
+        RoundRobinStorage.setMessages(staticData, workflowId, updatedMessages);
+        RoundRobinStorage.setLastUpdated(staticData, workflowId, Date.now());
+        
+        // Verify storage after saving to ensure data persisted within the staticData object
+        RoundRobinStorage.verifyStoragePersistence(staticData, workflowId);
         
       } else if (mode === 'retrieve') {
         const outputFormat = this.getNodeParameter('outputFormat', 0) as string;
@@ -604,6 +692,7 @@ export class RoundRobin implements INodeType {
         
         // Debug messages
         console.log('Retrieving messages from storage');
+        // messages, roles, lastUpdated were fetched using workflowId at the start
         console.log('Total messages stored:', messages.length);
         
         if (messages.length === 0) {
@@ -616,7 +705,7 @@ export class RoundRobin implements INodeType {
               lastUpdated: lastUpdated ? new Date(lastUpdated).toISOString() : null,
             },
           });
-          return [returnData];
+          return [returnData]; // Exit early if no messages
         }
         
         // Create a copy of messages for processing
@@ -634,7 +723,7 @@ export class RoundRobin implements INodeType {
           processObjectOutput(returnData, messagesToProcess, roles, lastUpdated, simplifyOutput);
         } else if (outputFormat === 'conversationHistory') {
           processConversationHistoryOutput(
-            this,
+            this, // Pass the execution context
             returnData,
             messagesToProcess,
             roles,
@@ -643,9 +732,9 @@ export class RoundRobin implements INodeType {
           );
         }
       } else if (mode === 'clear') {
-        // Reset messages but keep roles
-        RoundRobinStorage.setMessages(staticData, nodeName, []);
-        RoundRobinStorage.setLastUpdated(staticData, nodeName, Date.now());
+        // Reset messages but keep roles, using Workflow ID
+        RoundRobinStorage.setMessages(staticData, workflowId, []);
+        RoundRobinStorage.setLastUpdated(staticData, workflowId, Date.now());
         
         console.log('Storage cleared successfully');
         
@@ -658,8 +747,8 @@ export class RoundRobin implements INodeType {
         });
       }
       
-      // Final debug log to confirm data persistence
-      console.log('Final storage state - message count:', RoundRobinStorage.getMessages(staticData, nodeName).length);
+      // Final debug log to confirm data persistence using Workflow ID
+      console.log('Final storage state - message count:', RoundRobinStorage.getMessages(staticData, workflowId).length);
       
     } catch (error) {
       if (error instanceof NodeOperationError) {

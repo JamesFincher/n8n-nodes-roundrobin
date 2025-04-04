@@ -3,64 +3,104 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RoundRobin = exports.RoundRobinStorage = void 0;
 const n8n_workflow_1 = require("n8n-workflow");
 class RoundRobinStorage {
-    static getPrefix(nodeName) {
-        return `rr_${nodeName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    static getPrefix(workflowId) {
+        const safeWorkflowId = String(workflowId || 'default_workflow').replace(/[^a-zA-Z0-9]/g, '_');
+        return `rr_wf_${safeWorkflowId}`;
     }
-    static getMessagesKey(nodeName) {
-        return `${this.getPrefix(nodeName)}_messages`;
+    static getMessagesKey(workflowId) {
+        return `${this.getPrefix(workflowId)}_messages`;
     }
-    static getRolesKey(nodeName) {
-        return `${this.getPrefix(nodeName)}_roles`;
+    static getRolesKey(workflowId) {
+        return `${this.getPrefix(workflowId)}_roles`;
     }
-    static getSpotCountKey(nodeName) {
-        return `${this.getPrefix(nodeName)}_spotCount`;
+    static getSpotCountKey(workflowId) {
+        return `${this.getPrefix(workflowId)}_spotCount`;
     }
-    static getLastUpdatedKey(nodeName) {
-        return `${this.getPrefix(nodeName)}_lastUpdated`;
+    static getLastUpdatedKey(workflowId) {
+        return `${this.getPrefix(workflowId)}_lastUpdated`;
     }
-    static getMessages(staticData, nodeName) {
-        const key = this.getMessagesKey(nodeName);
+    static getMessages(staticData, workflowId) {
+        const key = this.getMessagesKey(workflowId);
+        console.log(`[Storage] Getting messages with key: ${key}`);
         return staticData[key] || [];
     }
-    static setMessages(staticData, nodeName, messages) {
-        const key = this.getMessagesKey(nodeName);
+    static setMessages(staticData, workflowId, messages) {
+        const key = this.getMessagesKey(workflowId);
+        console.log(`[Storage] Setting messages with key: ${key}, Count: ${messages.length}`);
         staticData[key] = messages;
     }
-    static getRoles(staticData, nodeName) {
-        const key = this.getRolesKey(nodeName);
+    static getRoles(staticData, workflowId) {
+        const key = this.getRolesKey(workflowId);
+        console.log(`[Storage] Getting roles with key: ${key}`);
         return staticData[key] || [];
     }
-    static setRoles(staticData, nodeName, roles) {
-        const key = this.getRolesKey(nodeName);
+    static setRoles(staticData, workflowId, roles) {
+        const key = this.getRolesKey(workflowId);
+        console.log(`[Storage] Setting roles with key: ${key}, Count: ${roles.length}`);
         staticData[key] = roles;
     }
-    static getSpotCount(staticData, nodeName) {
-        const key = this.getSpotCountKey(nodeName);
+    static getSpotCount(staticData, workflowId) {
+        const key = this.getSpotCountKey(workflowId);
+        console.log(`[Storage] Getting spot count with key: ${key}`);
         return staticData[key] || 0;
     }
-    static setSpotCount(staticData, nodeName, count) {
-        const key = this.getSpotCountKey(nodeName);
+    static setSpotCount(staticData, workflowId, count) {
+        const key = this.getSpotCountKey(workflowId);
+        console.log(`[Storage] Setting spot count with key: ${key}, Count: ${count}`);
         staticData[key] = count;
     }
-    static getLastUpdated(staticData, nodeName) {
-        const key = this.getLastUpdatedKey(nodeName);
+    static getLastUpdated(staticData, workflowId) {
+        const key = this.getLastUpdatedKey(workflowId);
+        console.log(`[Storage] Getting last updated with key: ${key}`);
         return staticData[key] || Date.now();
     }
-    static setLastUpdated(staticData, nodeName, timestamp) {
-        const key = this.getLastUpdatedKey(nodeName);
+    static setLastUpdated(staticData, workflowId, timestamp) {
+        const key = this.getLastUpdatedKey(workflowId);
+        console.log(`[Storage] Setting last updated with key: ${key}, Timestamp: ${timestamp}`);
         staticData[key] = timestamp;
     }
-    static initializeStorage(staticData, nodeName) {
-        if (!this.getMessages(staticData, nodeName).length) {
-            this.setMessages(staticData, nodeName, []);
+    static initializeStorage(staticData, workflowId) {
+        const existingMessages = this.getMessages(staticData, workflowId);
+        if (existingMessages.length === 0) {
+            console.log(`[Storage Init] No messages found for workflow ${workflowId}. Initializing.`);
+            this.setMessages(staticData, workflowId, []);
         }
-        if (!this.getRoles(staticData, nodeName).length) {
-            this.setRoles(staticData, nodeName, []);
+        else {
+            console.log(`[Storage Init] Found ${existingMessages.length} existing messages for workflow ${workflowId}. No initialization needed.`);
         }
-        if (!this.getSpotCount(staticData, nodeName)) {
-            this.setSpotCount(staticData, nodeName, 0);
+        const existingRoles = this.getRoles(staticData, workflowId);
+        if (existingRoles.length === 0) {
+            console.log(`[Storage Init] No roles found for workflow ${workflowId}. Initializing.`);
+            this.setRoles(staticData, workflowId, []);
         }
-        this.setLastUpdated(staticData, nodeName, Date.now());
+        else {
+            console.log(`[Storage Init] Found ${existingRoles.length} existing roles for workflow ${workflowId}. No initialization needed.`);
+        }
+        const existingSpotCount = this.getSpotCount(staticData, workflowId);
+        if (existingSpotCount === 0 && !staticData[this.getSpotCountKey(workflowId)]) {
+            console.log(`[Storage Init] No spot count found for workflow ${workflowId}. Initializing to 0.`);
+            this.setSpotCount(staticData, workflowId, 0);
+        }
+        else {
+            console.log(`[Storage Init] Found existing spot count (${existingSpotCount}) for workflow ${workflowId}. No initialization needed.`);
+        }
+        console.log(`[Storage Init] Setting/Updating last updated timestamp for workflow ${workflowId}.`);
+        this.setLastUpdated(staticData, workflowId, Date.now());
+    }
+    static verifyStoragePersistence(staticData, workflowId) {
+        const messages = this.getMessages(staticData, workflowId);
+        console.log(`[Storage Verify] Message count after save: ${messages.length}. Storage key: ${this.getMessagesKey(workflowId)}`);
+        console.log(`[Storage Verify] staticData keys: ${Object.keys(staticData).join(', ')}`);
+        console.log(`[Storage Verify] Storage diagnostics:`, {
+            messagesKey: this.getMessagesKey(workflowId),
+            rolesKey: this.getRolesKey(workflowId),
+            spotCountKey: this.getSpotCountKey(workflowId),
+            lastUpdatedKey: this.getLastUpdatedKey(workflowId),
+            hasMessagesInStorage: staticData[this.getMessagesKey(workflowId)] !== undefined,
+            messagesCount: messages.length,
+            rolesCount: this.getRoles(staticData, workflowId).length,
+            staticDataSize: JSON.stringify(staticData).length,
+        });
     }
 }
 exports.RoundRobinStorage = RoundRobinStorage;
@@ -410,44 +450,74 @@ class RoundRobin {
                     },
                     description: 'Maximum number of messages to return (0 for all messages)',
                 },
+                {
+                    displayName: 'Storage ID',
+                    name: 'storageId',
+                    type: 'string',
+                    default: '',
+                    displayOptions: {
+                        show: {
+                            mode: ['store', 'retrieve', 'clear'],
+                        },
+                    },
+                    description: 'Optional: Set a consistent ID to share storage across multiple node instances. If left empty, workflow ID will be used.',
+                },
             ],
         };
     }
     async execute() {
+        var _a;
         const items = this.getInputData();
         const returnData = [];
         const mode = this.getNodeParameter('mode', 0);
         try {
             const nodeName = this.getNode().name;
+            let workflowId = (_a = this.getWorkflow()) === null || _a === void 0 ? void 0 : _a.id;
+            console.log(`[Execution] Raw Workflow ID: ${workflowId}`);
+            if (!workflowId) {
+                console.warn(`[Execution] Warning: Workflow ID is undefined. Falling back to node name ('${nodeName}') for storage key. Check n8n environment if persistence issues occur.`);
+                workflowId = nodeName;
+            }
+            else {
+                workflowId = String(workflowId);
+            }
+            const userStorageId = this.getNodeParameter('storageId', 0, '');
+            if (userStorageId) {
+                console.log(`[Execution] Using user-provided Storage ID: "${userStorageId}" instead of workflow ID`);
+                workflowId = userStorageId;
+            }
+            console.log(`[Execution] Using effective ID for storage: ${workflowId}`);
             const staticData = this.getWorkflowStaticData('global');
-            RoundRobinStorage.initializeStorage(staticData, nodeName);
+            RoundRobinStorage.initializeStorage(staticData, workflowId);
             console.log('RoundRobin node executing in mode:', mode);
             console.log(`Node instance: ${nodeName}`);
-            const messages = RoundRobinStorage.getMessages(staticData, nodeName);
-            const roles = RoundRobinStorage.getRoles(staticData, nodeName);
-            const spotCount = RoundRobinStorage.getSpotCount(staticData, nodeName);
-            const lastUpdated = RoundRobinStorage.getLastUpdated(staticData, nodeName);
+            const messages = RoundRobinStorage.getMessages(staticData, workflowId);
+            const roles = RoundRobinStorage.getRoles(staticData, workflowId);
+            const spotCount = RoundRobinStorage.getSpotCount(staticData, workflowId);
+            const lastUpdated = RoundRobinStorage.getLastUpdated(staticData, workflowId);
             console.log('Current message count:', messages.length);
             console.log('Current roles count:', roles.length);
             if (mode === 'store') {
                 const newSpotCount = this.getNodeParameter('spotCount', 0);
                 const spotIndex = this.getNodeParameter('spotIndex', 0);
                 const inputField = this.getNodeParameter('inputField', 0);
-                RoundRobinStorage.setSpotCount(staticData, nodeName, newSpotCount);
+                RoundRobinStorage.setSpotCount(staticData, workflowId, newSpotCount);
                 const rolesCollection = this.getNodeParameter('roles', 0);
                 const updatedRoles = processRoles(rolesCollection);
+                const currentRolesForInitCheck = RoundRobinStorage.getRoles(staticData, workflowId);
                 if (updatedRoles.length > 0) {
-                    RoundRobinStorage.setRoles(staticData, nodeName, updatedRoles);
+                    RoundRobinStorage.setRoles(staticData, workflowId, updatedRoles);
                 }
-                else if (roles.length === 0) {
+                else if (currentRolesForInitCheck.length === 0) {
                     const defaultRoles = getDefaultRoles();
-                    RoundRobinStorage.setRoles(staticData, nodeName, defaultRoles);
+                    RoundRobinStorage.setRoles(staticData, workflowId, defaultRoles);
                 }
-                const currentRoles = RoundRobinStorage.getRoles(staticData, nodeName);
+                const currentRoles = RoundRobinStorage.getRoles(staticData, workflowId);
                 if (spotIndex < 0 || spotIndex >= newSpotCount) {
                     throw new n8n_workflow_1.NodeOperationError(this.getNode(), `Spot index must be between 0 and ${newSpotCount - 1}`);
                 }
-                const updatedMessages = [...messages];
+                const currentMessages = RoundRobinStorage.getMessages(staticData, workflowId);
+                const updatedMessages = [...currentMessages];
                 for (let i = 0; i < items.length; i++) {
                     const item = items[i];
                     const messageContent = extractMessageContent(item, inputField, i, this);
@@ -476,8 +546,9 @@ class RoundRobin {
                         },
                     });
                 }
-                RoundRobinStorage.setMessages(staticData, nodeName, updatedMessages);
-                RoundRobinStorage.setLastUpdated(staticData, nodeName, Date.now());
+                RoundRobinStorage.setMessages(staticData, workflowId, updatedMessages);
+                RoundRobinStorage.setLastUpdated(staticData, workflowId, Date.now());
+                RoundRobinStorage.verifyStoragePersistence(staticData, workflowId);
             }
             else if (mode === 'retrieve') {
                 const outputFormat = this.getNodeParameter('outputFormat', 0);
@@ -511,8 +582,8 @@ class RoundRobin {
                 }
             }
             else if (mode === 'clear') {
-                RoundRobinStorage.setMessages(staticData, nodeName, []);
-                RoundRobinStorage.setLastUpdated(staticData, nodeName, Date.now());
+                RoundRobinStorage.setMessages(staticData, workflowId, []);
+                RoundRobinStorage.setLastUpdated(staticData, workflowId, Date.now());
                 console.log('Storage cleared successfully');
                 returnData.push({
                     json: {
@@ -522,7 +593,7 @@ class RoundRobin {
                     },
                 });
             }
-            console.log('Final storage state - message count:', RoundRobinStorage.getMessages(staticData, nodeName).length);
+            console.log('Final storage state - message count:', RoundRobinStorage.getMessages(staticData, workflowId).length);
         }
         catch (error) {
             if (error instanceof n8n_workflow_1.NodeOperationError) {

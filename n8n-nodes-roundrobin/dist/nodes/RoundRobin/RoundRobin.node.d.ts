@@ -16,20 +16,21 @@ interface IRoundRobinRole {
     isEnabled?: boolean;
 }
 export declare class RoundRobinStorage {
-    static getPrefix(nodeName: string): string;
-    static getMessagesKey(nodeName: string): string;
-    static getRolesKey(nodeName: string): string;
-    static getSpotCountKey(nodeName: string): string;
-    static getLastUpdatedKey(nodeName: string): string;
-    static getMessages(staticData: IDataObject, nodeName: string): IRoundRobinMessage[];
-    static setMessages(staticData: IDataObject, nodeName: string, messages: IRoundRobinMessage[]): void;
-    static getRoles(staticData: IDataObject, nodeName: string): IRoundRobinRole[];
-    static setRoles(staticData: IDataObject, nodeName: string, roles: IRoundRobinRole[]): void;
-    static getSpotCount(staticData: IDataObject, nodeName: string): number;
-    static setSpotCount(staticData: IDataObject, nodeName: string, count: number): void;
-    static getLastUpdated(staticData: IDataObject, nodeName: string): number;
-    static setLastUpdated(staticData: IDataObject, nodeName: string, timestamp: number): void;
-    static initializeStorage(staticData: IDataObject, nodeName: string): void;
+    static getPrefix(workflowId: string): string;
+    static getMessagesKey(workflowId: string): string;
+    static getRolesKey(workflowId: string): string;
+    static getSpotCountKey(workflowId: string): string;
+    static getLastUpdatedKey(workflowId: string): string;
+    static getMessages(staticData: IDataObject, workflowId: string): IRoundRobinMessage[];
+    static setMessages(staticData: IDataObject, workflowId: string, messages: IRoundRobinMessage[]): void;
+    static getRoles(staticData: IDataObject, workflowId: string): IRoundRobinRole[];
+    static setRoles(staticData: IDataObject, workflowId: string, roles: IRoundRobinRole[]): void;
+    static getSpotCount(staticData: IDataObject, workflowId: string): number;
+    static setSpotCount(staticData: IDataObject, workflowId: string, count: number): void;
+    static getLastUpdated(staticData: IDataObject, workflowId: string): number;
+    static setLastUpdated(staticData: IDataObject, workflowId: string, timestamp: number): void;
+    static initializeStorage(staticData: IDataObject, workflowId: string): void;
+    static verifyStoragePersistence(staticData: IDataObject, workflowId: string): void;
 }
 export declare class RoundRobin implements INodeType {
     description: INodeTypeDescription;
