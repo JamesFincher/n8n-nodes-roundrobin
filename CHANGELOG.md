@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.9.2 (2024-04-04)
+### Added
+- Improved round counter implementation with better UI integration
+- Enhanced error handling for round limit enforcement
+- Added round count information to all output formats
+
+### Changed
+- Further improved UI elements for better user experience
+- Reorganized parameters for more intuitive workflow configuration
+
 ## v0.9.1 (2024-04-04)
 ### Added
 - Added conversation round counter that tracks and limits conversation turns

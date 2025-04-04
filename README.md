@@ -55,7 +55,7 @@ npm link n8n-nodes-roundrobin
 To install the node globally, run:
 
 ```bash
-npm install -g n8n-nodes-roundrobin@0.9.1
+npm install -g n8n-nodes-roundrobin@0.9.2
 ```
 
 ### Docker Installation
@@ -66,7 +66,7 @@ If you're using Docker to run n8n, you can include this custom node by:
 ```dockerfile
 FROM n8nio/n8n
 
-RUN npm install -g n8n-nodes-roundrobin@0.9.1
+RUN npm install -g n8n-nodes-roundrobin@0.9.2
 ```
 
 2. Building your custom image:
@@ -159,6 +159,12 @@ Resets all stored messages while preserving role configurations.
   - The workflow is updated and redeployed
 
 ## Version History
+
+### v0.9.2 - UI Improvements & Round Counter Optimization
+- Improved round counter implementation with better error handling
+- Enhanced user interface with more intuitive parameter organization
+- Added round count information to all output formats
+- Further improved storage reliability across workflow executions
 
 ### v0.9.1 - Storage Improvements & Round Counter
 - Added conversation round counter to track and limit conversation turns
