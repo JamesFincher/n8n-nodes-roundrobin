@@ -14,9 +14,17 @@ interface IRoundRobinMessage {
   timestamp: number;
 }
 
+// Enhanced persona interface with additional metadata
 interface IRoundRobinRole {
   name: string;
   description: string;
+  // Enhanced persona properties
+  color?: string;
+  icon?: string;
+  tone?: string;
+  expertise?: string[];
+  systemPrompt?: string;
+  isEnabled?: boolean;
 }
 
 // Define the structure of our node's static data
@@ -138,9 +146,24 @@ export class RoundRobin implements INodeType {
         },
         default: { 
           values: [
-            { name: 'User', description: 'The human user in the conversation' },
-            { name: 'Assistant', description: 'The AI assistant in the conversation' },
-            { name: 'System', description: 'System instructions for the AI model' }
+            { 
+              name: 'User', 
+              description: 'The human user in the conversation',
+              color: '#6E9BF7',
+              isEnabled: true
+            },
+            { 
+              name: 'Assistant', 
+              description: 'The AI assistant in the conversation',
+              color: '#9E78FF',
+              isEnabled: true 
+            },
+            { 
+              name: 'System', 
+              description: 'System instructions for the AI model',
+              color: '#FF9900',
+              isEnabled: true
+            }
           ] 
         },
         displayOptions: {
@@ -171,6 +194,52 @@ export class RoundRobin implements INodeType {
                 },
                 default: '',
                 description: 'Description of the role/persona',
+              },
+              {
+                displayName: 'Color',
+                name: 'color',
+                type: 'color',
+                default: '#ff9900',
+                description: 'Color associated with this role for visual identification',
+              },
+              {
+                displayName: 'Tone',
+                name: 'tone',
+                type: 'options',
+                options: [
+                  { name: 'Neutral', value: 'neutral' },
+                  { name: 'Friendly', value: 'friendly' },
+                  { name: 'Professional', value: 'professional' },
+                  { name: 'Technical', value: 'technical' },
+                  { name: 'Empathetic', value: 'empathetic' },
+                  { name: 'Assertive', value: 'assertive' },
+                ],
+                default: 'neutral',
+                description: 'Tone of voice for this persona',
+              },
+              {
+                displayName: 'Expertise Areas',
+                name: 'expertise',
+                type: 'string',
+                default: '',
+                description: 'Comma-separated list of expertise areas (e.g., "programming, marketing, design")',
+              },
+              {
+                displayName: 'System Prompt Template',
+                name: 'systemPrompt',
+                type: 'string',
+                typeOptions: {
+                  rows: 4,
+                },
+                default: '',
+                description: 'System prompt template for this persona (if role is "system" or you need role-specific instructions)',
+              },
+              {
+                displayName: 'Enabled',
+                name: 'isEnabled',
+                type: 'boolean',
+                default: true,
+                description: 'Whether this role should be included in the conversation',
               },
             ],
           },
@@ -246,6 +315,82 @@ export class RoundRobin implements INodeType {
         },
         description: 'Format of the retrieved messages',
       },
+      // LLM Platform Selection
+      {
+        displayName: 'LLM Platform',
+        name: 'llmPlatform',
+        type: 'options',
+        options: [
+          {
+            name: 'OpenAI (ChatGPT)',
+            value: 'openai',
+            description: 'Format for OpenAI models (GPT-3.5, GPT-4, etc.)',
+          },
+          {
+            name: 'Anthropic (Claude)',
+            value: 'anthropic',
+            description: 'Format for Anthropic Claude models',
+          },
+          {
+            name: 'Google (Gemini)',
+            value: 'google',
+            description: 'Format for Google Gemini models',
+          },
+          {
+            name: 'Generic',
+            value: 'generic',
+            description: 'Generic format that works with most LLMs',
+          },
+        ],
+        default: 'openai',
+        displayOptions: {
+          show: {
+            mode: ['retrieve'],
+            outputFormat: ['conversationHistory'],
+          },
+        },
+        description: 'Which LLM platform to format the conversation history for',
+      },
+      // System Prompt Options
+      {
+        displayName: 'Include System Prompt',
+        name: 'includeSystemPrompt',
+        type: 'boolean',
+        default: true,
+        displayOptions: {
+          show: {
+            mode: ['retrieve'],
+            outputFormat: ['conversationHistory'],
+          },
+        },
+        description: 'Whether to include system prompt/instructions in the conversation history',
+      },
+      {
+        displayName: 'System Prompt Position',
+        name: 'systemPromptPosition',
+        type: 'options',
+        options: [
+          {
+            name: 'Start of Conversation',
+            value: 'start',
+            description: 'Place system prompt at the beginning (as first message)',
+          },
+          {
+            name: 'End of Conversation',
+            value: 'end',
+            description: 'Place system prompt at the end (as last message)',
+          },
+        ],
+        default: 'start',
+        displayOptions: {
+          show: {
+            mode: ['retrieve'],
+            outputFormat: ['conversationHistory'],
+            includeSystemPrompt: [true],
+          },
+        },
+        description: 'Where to place the system prompt in the conversation',
+      },
       {
         displayName: 'Simplify Output',
         name: 'simplifyOutput',
@@ -279,11 +424,15 @@ export class RoundRobin implements INodeType {
     const mode = this.getNodeParameter('mode', 0) as string;
     
     try {
+      // Get unique node identifier for persistent storage
+      const nodeId = this.getNode().name;
+      
       // Initialize or get existing workflow static data with proper typing
-      const staticData = this.getWorkflowStaticData('node') as IStaticData;
+      const staticData = this.getWorkflowStaticData(nodeId) as IStaticData;
       
       // Log initial state for debugging
       console.log('RoundRobin node executing in mode:', mode);
+      console.log(`Node ID for storage: ${nodeId}`);
       console.log('Initial staticData keys:', Object.keys(staticData));
       
       // Reconstruct data from serialized form if available
@@ -324,20 +473,46 @@ export class RoundRobin implements INodeType {
         
         // Get roles if defined
         const rolesCollection = this.getNodeParameter('roles', 0) as {
-          values?: Array<{ name: string; description: string }>;
+          values?: Array<{ name: string; description: string; color?: string; tone?: string; expertise?: string; systemPrompt?: string; isEnabled?: boolean }>;
         };
         
         if (rolesCollection.values && rolesCollection.values.length) {
           staticData.roles = rolesCollection.values.map(role => ({
             name: role.name,
             description: role.description || '',
+            color: role.color || '#ff9900',
+            tone: role.tone || 'neutral',
+            expertise: typeof role.expertise === 'string' 
+              ? role.expertise.split(',').map(item => item.trim()) 
+              : (Array.isArray(role.expertise) ? role.expertise : []),
+            systemPrompt: role.systemPrompt || '',
+            isEnabled: role.isEnabled !== undefined ? role.isEnabled : true,
           }));
         } else if (!staticData.roles.length) {
           // Initialize with default roles if not set
           staticData.roles = [
-            { name: 'User', description: 'The human user in the conversation' },
-            { name: 'Assistant', description: 'The AI assistant in the conversation' },
-            { name: 'System', description: 'System instructions for the AI model' }
+            { 
+              name: 'User', 
+              description: 'The human user in the conversation',
+              color: '#6E9BF7',
+              isEnabled: true,
+              expertise: []
+            },
+            { 
+              name: 'Assistant', 
+              description: 'The AI assistant in the conversation',
+              color: '#9E78FF',
+              isEnabled: true,
+              expertise: []
+            },
+            { 
+              name: 'System', 
+              description: 'System instructions for the AI model',
+              color: '#FF9900',
+              isEnabled: true,
+              systemPrompt: 'You are a helpful, friendly AI assistant.',
+              expertise: []
+            }
           ];
         }
 
@@ -514,20 +689,154 @@ export class RoundRobin implements INodeType {
           returnData.push({ json: outputJson });
           
         } else if (outputFormat === 'conversationHistory') {
-          // Return messages in a format suitable for LLM conversation history
-          const conversationHistory = messages.map(message => ({
-            role: message.role?.toLowerCase() || 'assistant',
-            content: message.content,
-          }));
+          // Get parameters
+          const llmPlatform = this.getNodeParameter('llmPlatform', 0, 'openai') as string;
+          const includeSystemPrompt = this.getNodeParameter('includeSystemPrompt', 0, true) as boolean;
+          const systemPromptPosition = this.getNodeParameter('systemPromptPosition', 0, 'start') as string;
           
+          // Find system role data
+          const systemRole = staticData.roles.find(role => role.name.toLowerCase() === 'system');
+          const systemPrompt = systemRole?.systemPrompt || 'You are a helpful, friendly AI assistant.';
+          
+          // Filter out disabled roles if needed
+          const enabledMessages = messages.filter(msg => {
+            const role = staticData.roles.find(r => r.name === msg.role);
+            return role?.isEnabled !== false; // If not explicitly disabled, include it
+          });
+          
+          // Format based on LLM platform
+          let conversationHistory: any[] = [];
+          
+          if (llmPlatform === 'openai') {
+            // OpenAI format: { role, content }
+            if (includeSystemPrompt && systemPromptPosition === 'start') {
+              conversationHistory.push({
+                role: 'system',
+                content: systemPrompt,
+              });
+            }
+            
+            conversationHistory = [
+              ...conversationHistory,
+              ...enabledMessages.map(message => {
+                // Map role names to OpenAI expected format
+                let role = message.role.toLowerCase();
+                if (role === 'user' || role === 'human') role = 'user';
+                if (role === 'assistant' || role === 'ai') role = 'assistant';
+                if (role === 'system' || role === 'instructions') role = 'system';
+                
+                return {
+                  role,
+                  content: message.content,
+                };
+              }),
+            ];
+            
+            if (includeSystemPrompt && systemPromptPosition === 'end') {
+              conversationHistory.push({
+                role: 'system',
+                content: systemPrompt,
+              });
+            }
+          } 
+          else if (llmPlatform === 'anthropic') {
+            // Anthropic Claude format: textual format with \n\nHuman: and \n\nAssistant:
+            let claudeFormat = '';
+            
+            if (includeSystemPrompt) {
+              claudeFormat += `\n\nSystem: ${systemPrompt}\n\n`;
+            }
+            
+            for (const message of enabledMessages) {
+              let role = message.role.toLowerCase();
+              if (role === 'user' || role === 'human') role = 'Human';
+              else if (role === 'assistant' || role === 'ai') role = 'Assistant';
+              else if (role === 'system') continue; // Skip system messages in the main loop for Claude
+              
+              claudeFormat += `\n\n${role}: ${message.content}`;
+            }
+            
+            // For Claude, return a different structure
+            const outputJson: IDataObject = {
+              claudeFormat: claudeFormat.trim(),
+              messageCount: enabledMessages.length,
+            };
+            
+            if (!simplifyOutput) {
+              outputJson.messages = enabledMessages;
+              outputJson.lastUpdated = new Date(staticData.lastUpdated).toISOString();
+            }
+            
+            returnData.push({ json: outputJson });
+            return [returnData]; // Early return for Claude format
+          }
+          else if (llmPlatform === 'google') {
+            // Google format: similar to OpenAI but with different role naming
+            if (includeSystemPrompt && systemPromptPosition === 'start') {
+              conversationHistory.push({
+                role: 'system',
+                content: systemPrompt,
+              });
+            }
+            
+            conversationHistory = [
+              ...conversationHistory,
+              ...enabledMessages.map(message => {
+                // Map role names to Google expected format
+                let role = message.role.toLowerCase();
+                if (role === 'user' || role === 'human') role = 'user';
+                if (role === 'assistant' || role === 'ai' || role === 'bot') role = 'model';
+                if (role === 'system' || role === 'instructions') role = 'system';
+                
+                return {
+                  role,
+                  content: message.content,
+                };
+              }),
+            ];
+            
+            if (includeSystemPrompt && systemPromptPosition === 'end') {
+              conversationHistory.push({
+                role: 'system',
+                content: systemPrompt,
+              });
+            }
+          } 
+          else {
+            // Generic format: use as-is with lowercase roles
+            if (includeSystemPrompt && systemPromptPosition === 'start') {
+              conversationHistory.push({
+                role: 'system',
+                content: systemPrompt,
+              });
+            }
+            
+            conversationHistory = [
+              ...conversationHistory,
+              ...enabledMessages.map(message => ({
+                role: message.role.toLowerCase(),
+                content: message.content,
+              })),
+            ];
+            
+            if (includeSystemPrompt && systemPromptPosition === 'end') {
+              conversationHistory.push({
+                role: 'system',
+                content: systemPrompt,
+              });
+            }
+          }
+          
+          // Prepare the output
           const outputJson: IDataObject = {
             conversationHistory,
             messageCount: conversationHistory.length,
           };
           
           if (!simplifyOutput) {
-            // Add more metadata if not simplifying
             outputJson.lastUpdated = new Date(staticData.lastUpdated).toISOString();
+            outputJson.platform = llmPlatform;
+            outputJson.roles = JSON.parse(JSON.stringify(staticData.roles));
           }
           
           returnData.push({ json: outputJson });

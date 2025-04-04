@@ -5,11 +5,13 @@ This is a custom node for [n8n](https://n8n.io/) that allows you to store and re
 ## Features
 
 - **Store messages** from different roles/personas in a stateful way during workflow execution
+- **Enhanced persona profiles** with tone, expertise areas, colors, and system prompts
+- **LLM platform integrations** with formatting for OpenAI, Anthropic Claude, and Google Gemini
+- **System prompt management** for guiding AI behavior
 - **Retrieve messages** in various formats (array, object by role, or conversation history for LLMs)
 - **Simplify outputs** to create clean, minimal data structures for AI models
 - **LLM-ready defaults** pre-configured for ChatGPT-style conversations
 - **Clear stored messages** when needed
-- **Filter messages** by role or limit the number retrieved
 
 ## Installation
 
@@ -51,7 +53,7 @@ npm link n8n-nodes-roundrobin
 To install the node globally, run:
 
 ```bash
-npm install -g n8n-nodes-roundrobin@0.5.0
+npm install -g n8n-nodes-roundrobin@0.7.0
 ```
 
 ### Docker Installation
@@ -62,7 +64,7 @@ If you're using Docker to run n8n, you can include this custom node by:
 ```dockerfile
 FROM n8nio/n8n
 
-RUN npm install -g n8n-nodes-roundrobin@0.5.0
+RUN npm install -g n8n-nodes-roundrobin@0.7.0
 ```
 
 2. Building your custom image:
@@ -84,7 +86,8 @@ docker run -it --rm \
 
 1. **Initial Setup**: Start by configuring the Round Robin node in "Store" mode.
    - Set the number of spots (default: 3 for User, Assistant, System)
-   - Define the roles for each spot (default roles are pre-configured for LLM conversations)
+   - Define the roles for each spot with enhanced persona details
+   - Configure colors, tones, expertise areas, and system prompts
 
 2. **Storing Messages**: For each message in your workflow:
    - Configure the Round Robin node to "Store" mode
@@ -94,8 +97,9 @@ docker run -it --rm \
 3. **Retrieving Messages**: When you need to retrieve the conversation:
    - Configure the Round Robin node to "Retrieve" mode
    - Choose the output format (array, object, or conversation history)
+   - Select the target LLM platform (OpenAI, Claude, etc.)
+   - Configure system prompt options
    - Enable "Simplify Output" for clean, minimal data
-   - Optionally limit the number of messages
 
 ### LLM Conversation Loop Example
 
@@ -104,7 +108,7 @@ Here's a typical workflow for managing multi-persona conversations with LLMs:
 1. **Initialize** with the Round Robin in "Clear" mode to start fresh
 2. **Store Initial Message** from User (spot index 0)
 3. **Loop**:
-   - Retrieve the conversation history (format: conversationHistory)
+   - Retrieve the conversation history (format: conversationHistory, platform: openai)
    - Send to LLM for Assistant response
    - Store the Assistant response (spot index 1)
    - Retrieve updated conversation history
@@ -116,7 +120,14 @@ Here's a typical workflow for managing multi-persona conversations with LLMs:
 
 ### Store Mode
 - **Number of Spots**: Define how many distinct roles/personas you have (default: 3)
-- **Roles**: Configure names and descriptions for each role (defaults: User, Assistant, System)
+- **Roles**: Configure enhanced persona details:
+  - **Name**: Name of the role/persona
+  - **Description**: Description of the role/persona
+  - **Color**: Visual color indicator for the role
+  - **Tone**: Tone of voice (friendly, professional, technical, etc.)
+  - **Expertise Areas**: Comma-separated list of expertise domains
+  - **System Prompt Template**: Role-specific system instructions
+  - **Enabled**: Whether this role should be included in conversations
 - **Input Message Field**: Field name containing the message to store (default: "output")
 - **Spot Index**: Which spot to store the message in (0-based index)
 
@@ -125,6 +136,14 @@ Here's a typical workflow for managing multi-persona conversations with LLMs:
   - `array`: Returns all messages as an array
   - `object`: Groups messages by role name
   - `conversationHistory`: Formats for LLM input (default)
+- **LLM Platform**: Format specifically for different AI platforms
+  - **OpenAI (ChatGPT)**: Standard OpenAI format with user/assistant/system roles
+  - **Anthropic (Claude)**: Claude-specific format with Human/Assistant markers
+  - **Google (Gemini)**: Google's conversation format
+  - **Generic**: Generic format compatible with most LLMs
+- **System Prompt Options**:
+  - **Include System Prompt**: Whether to include system instructions
+  - **System Prompt Position**: Place at start or end of conversation
 - **Simplify Output**: Returns clean, minimal data structures (default: true)
 - **Maximum Messages**: Limit the number of messages returned (0 = all)
 
@@ -138,6 +157,12 @@ Resets all stored messages while preserving role configurations.
   - The workflow is updated and redeployed
 
 ## Version History
+
+### v0.7.0 - Phase 2: Enhanced Persona System & LLM Integration
+- Added rich persona profiles with tone, expertise, and color
+- Implemented platform-specific formatting for OpenAI, Claude, and Gemini
+- Added system prompt management with positioning options
+- Enhanced filtering of messages by role enablement
 
 ### v0.6.1 - Storage Reliability Fix
 - Fixed critical issue with data persistence between workflow executions
