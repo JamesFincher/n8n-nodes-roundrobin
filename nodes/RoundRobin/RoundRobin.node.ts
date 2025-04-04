@@ -55,6 +55,14 @@ export class RoundRobinStorage {
     return `${this.getPrefix(workflowId)}_lastUpdated`;
   }
   
+  static getRoundCountKey(workflowId: string): string {
+    return `${this.getPrefix(workflowId)}_roundCount`;
+  }
+  
+  static getMaxRoundsKey(workflowId: string): string {
+    return `${this.getPrefix(workflowId)}_maxRounds`;
+  }
+  
   // Helper functions for accessing storage data using Workflow ID
   static getMessages(staticData: IDataObject, workflowId: string): IRoundRobinMessage[] {
     const key = this.getMessagesKey(workflowId);
@@ -106,6 +114,30 @@ export class RoundRobinStorage {
     staticData[key] = timestamp;
   }
   
+  static getRoundCount(staticData: IDataObject, workflowId: string): number {
+    const key = this.getRoundCountKey(workflowId);
+    console.log(`[Storage] Getting round count with key: ${key}`);
+    return (staticData[key] as number) || 0;
+  }
+  
+  static setRoundCount(staticData: IDataObject, workflowId: string, count: number): void {
+    const key = this.getRoundCountKey(workflowId);
+    console.log(`[Storage] Setting round count with key: ${key}, Count: ${count}`);
+    staticData[key] = count;
+  }
+  
+  static getMaxRounds(staticData: IDataObject, workflowId: string): number {
+    const key = this.getMaxRoundsKey(workflowId);
+    console.log(`[Storage] Getting max rounds with key: ${key}`);
+    return (staticData[key] as number) || 0;
+  }
+  
+  static setMaxRounds(staticData: IDataObject, workflowId: string, maxRounds: number): void {
+    const key = this.getMaxRoundsKey(workflowId);
+    console.log(`[Storage] Setting max rounds with key: ${key}, Max: ${maxRounds}`);
+    staticData[key] = maxRounds;
+  }
+  
   // Initialize storage for a workflow
   static initializeStorage(staticData: IDataObject, workflowId: string): void {
     const existingMessages = this.getMessages(staticData, workflowId);
@@ -132,6 +164,12 @@ export class RoundRobinStorage {
        console.log(`[Storage Init] Found existing spot count (${existingSpotCount}) for workflow ${workflowId}. No initialization needed.`);
     }
     
+    // Initialize round count if not set
+    if (!staticData[this.getRoundCountKey(workflowId)]) {
+      console.log(`[Storage Init] No round count found for workflow ${workflowId}. Initializing to 0.`);
+      this.setRoundCount(staticData, workflowId, 0);
+    }
+    
     // Always update last updated timestamp during initialization check
     console.log(`[Storage Init] Setting/Updating last updated timestamp for workflow ${workflowId}.`);
     this.setLastUpdated(staticData, workflowId, Date.now());
@@ -151,11 +189,48 @@ export class RoundRobinStorage {
       rolesKey: this.getRolesKey(workflowId),
       spotCountKey: this.getSpotCountKey(workflowId),
       lastUpdatedKey: this.getLastUpdatedKey(workflowId),
+      roundCountKey: this.getRoundCountKey(workflowId),
+      maxRoundsKey: this.getMaxRoundsKey(workflowId),
       hasMessagesInStorage: staticData[this.getMessagesKey(workflowId)] !== undefined,
       messagesCount: messages.length,
       rolesCount: this.getRoles(staticData, workflowId).length,
+      roundCount: this.getRoundCount(staticData, workflowId),
+      maxRounds: this.getMaxRounds(staticData, workflowId),
       staticDataSize: JSON.stringify(staticData).length,
     });
+  }
+  
+  // Calculate the current round count based on messages
+  static calculateRoundCount(messages: IRoundRobinMessage[], spotCount: number): number {
+    if (!messages.length || !spotCount) return 0;
+    
+    // Group messages by spotIndex to see how many complete rounds we have
+    const messagesBySpot: { [key: number]: number } = {};
+    messages.forEach(msg => {
+      if (messagesBySpot[msg.spotIndex] === undefined) {
+        messagesBySpot[msg.spotIndex] = 0;
+      }
+      messagesBySpot[msg.spotIndex]++;
+    });
+    
+    // Find the minimum count of messages in any spot
+    // This represents how many complete rounds we have
+    const spotsWithMessages = Object.keys(messagesBySpot).length;
+    
+    // If we don't have messages for all spots, we don't have a complete round yet
+    if (spotsWithMessages < spotCount) return 0;
+    
+    // Find the minimum count of messages across all spots
+    const minCount = Math.min(...Object.values(messagesBySpot));
+    return minCount;
+  }
+  
+  // Check if the round limit has been reached
+  static hasReachedRoundLimit(messages: IRoundRobinMessage[], spotCount: number, maxRounds: number): boolean {
+    if (maxRounds <= 0) return false; // No limit set
+    
+    const currentRounds = this.calculateRoundCount(messages, spotCount);
+    return currentRounds >= maxRounds;
   }
 }
 
@@ -193,7 +268,7 @@ export class RoundRobin implements INodeType {
     group: ['transform'],
     version: 1,
     subtitle: '={{ $parameter["mode"] }}',
-    description: 'Store and retrieve messages in a round-robin fashion for LLM conversation loops',
+    description: 'Manage conversational loops between multiple participants for LLM workflows',
     defaults: {
       name: 'Round Robin',
       color: '#ff9900',
@@ -201,45 +276,103 @@ export class RoundRobin implements INodeType {
     inputs: ['main'],
     outputs: ['main'],
     properties: [
+      // MODE SELECTION
       {
-        displayName: 'Mode',
+        displayName: 'Operation Mode',
         name: 'mode',
         type: 'options',
         options: [
           {
-            name: 'Store Messages',
+            name: 'Store Message',
             value: 'store',
-            description: 'Store messages in the conversation',
+            description: 'Add a new message to the conversation',
           },
           {
-            name: 'Retrieve Messages',
+            name: 'Retrieve Conversation',
             value: 'retrieve',
-            description: 'Retrieve stored messages',
+            description: 'Get the stored conversation history',
           },
           {
-            name: 'Clear All Messages',
+            name: 'Clear Conversation',
             value: 'clear',
-            description: 'Clear all stored messages',
+            description: 'Reset the conversation history',
           },
         ],
         default: 'store',
-        description: 'The operation to perform',
+        description: 'Select the operation you want to perform',
       },
-      // Notice to explain storage limitations
+      
+      // PERSISTENCE SECTION
       {
-        displayName: 'Storage Notice',
+        displayName: 'Storage Method',
+        name: 'storagePersistence',
+        type: 'options',
+        options: [
+          {
+            name: 'Binary Storage (Recommended)',
+            value: 'binary',
+            description: 'Store conversations in binary data - most reliable method across executions',
+          },
+          {
+            name: 'Static Data Storage (Legacy)',
+            value: 'staticData',
+            description: 'Store in n8n internal static data - requires activated workflow with trigger',
+          },
+        ],
+        default: 'binary',
+        description: 'Choose how conversation data should be stored between workflow runs',
+      },
+      {
+        displayName: 'Persistence Information',
         name: 'storageNotice',
         type: 'notice',
-        default: 'IMPORTANT: For data to persist between executions, this workflow MUST be activated and started by a trigger node (like Webhook, Cron, etc). Manual test executions from the editor do not save static data per n8n limitations.',
+        default: '<b>Binary Storage:</b> Passes conversation data between nodes for reliable storage but requires connecting compatible nodes.<br><b>Static Data Storage:</b> Only persists when workflow is activated and started by a trigger node. Manual test executions cannot save data with this method.',
+        description: 'Important information about storage persistence between executions'
+      },
+      {
+        displayName: 'Binary Input Property',
+        name: 'binaryInputProperty',
+        type: 'string',
+        default: 'data',
         displayOptions: {
           show: {
-            mode: ['store', 'retrieve'],
+            storagePersistence: ['binary'],
+            mode: ['retrieve', 'clear'],
+          },
+        },
+        description: 'Name of the binary property containing the conversation data',
+        placeholder: 'data',
+        hint: 'This must match the binary output property name from previous Round Robin nodes'
+      },
+      {
+        displayName: 'Conversation ID',
+        name: 'storageId',
+        type: 'string',
+        default: '',
+        displayOptions: {
+          show: {
+            mode: ['store', 'retrieve', 'clear'],
+          },
+        },
+        description: 'Optional: Use a consistent ID to maintain multiple separate conversations in the same workflow',
+        placeholder: 'my-support-chat',
+        hint: 'Leave empty to use workflow ID as default (most common scenario)'
+      },
+      
+      // STORE MODE PARAMETERS
+      {
+        displayName: 'Conversation Setup',
+        name: 'conversationSetupHeading',
+        type: 'notice',
+        default: 'Define the participants and structure of your conversation loop',
+        displayOptions: {
+          show: {
+            mode: ['store'],
           },
         },
       },
-      // Store mode parameters
       {
-        displayName: 'Number of Spots',
+        displayName: 'Number of Participants',
         name: 'spotCount',
         type: 'number',
         default: 3,
@@ -249,10 +382,24 @@ export class RoundRobin implements INodeType {
             mode: ['store'],
           },
         },
-        description: 'Number of spots in the round-robin',
+        description: 'How many different roles or participants in this conversation',
+        hint: 'For a typical AI chat, use 3 for User+Assistant+System'
       },
       {
-        displayName: 'Roles',
+        displayName: 'Maximum Conversation Rounds',
+        name: 'maxRounds',
+        type: 'number',
+        default: 0,
+        displayOptions: {
+          show: {
+            mode: ['store'],
+          },
+        },
+        description: 'Optional: Limit the number of full conversation loops (0 = unlimited)',
+        hint: 'Each round consists of one message from each participant'
+      },
+      {
+        displayName: 'Participant Roles',
         name: 'roles',
         placeholder: 'Add Role',
         type: 'fixedCollection',
@@ -287,7 +434,7 @@ export class RoundRobin implements INodeType {
             mode: ['store'],
           },
         },
-        description: 'Define the roles for each spot in the round-robin',
+        description: 'Define the roles for each participant in the conversation',
         options: [
           {
             name: 'values',
@@ -298,85 +445,52 @@ export class RoundRobin implements INodeType {
                 name: 'name',
                 type: 'string',
                 default: '',
-                description: 'Name of the role/persona',
+                description: 'Name of this participant (e.g., User, Assistant, System)',
                 required: true,
+                placeholder: 'Assistant'
               },
               {
-                displayName: 'Role Description',
+                displayName: 'Description',
                 name: 'description',
                 type: 'string',
                 typeOptions: {
-                  rows: 3,
+                  rows: 2,
                 },
                 default: '',
-                description: 'Description of the role/persona',
+                description: 'Optional description of this role',
+                placeholder: 'The AI helper that responds to user queries'
               },
               {
                 displayName: 'Color',
                 name: 'color',
                 type: 'color',
                 default: '#ff9900',
-                description: 'Color associated with this role for visual identification',
-              },
-              {
-                displayName: 'Tone',
-                name: 'tone',
-                type: 'options',
-                options: [
-                  { name: 'Neutral', value: 'neutral' },
-                  { name: 'Friendly', value: 'friendly' },
-                  { name: 'Professional', value: 'professional' },
-                  { name: 'Technical', value: 'technical' },
-                  { name: 'Empathetic', value: 'empathetic' },
-                  { name: 'Assertive', value: 'assertive' },
-                ],
-                default: 'neutral',
-                description: 'Tone of voice for this persona',
-              },
-              {
-                displayName: 'Expertise Areas',
-                name: 'expertise',
-                type: 'string',
-                default: '',
-                description: 'Comma-separated list of expertise areas (e.g., "programming, marketing, design")',
+                description: 'Color for visual identification in the workflow',
               },
               {
                 displayName: 'System Prompt Template',
                 name: 'systemPrompt',
                 type: 'string',
                 typeOptions: {
-                  rows: 4,
+                  rows: 3,
                 },
                 default: '',
-                description: 'System prompt template for this persona (if role is "system" or you need role-specific instructions)',
+                description: 'Optional system prompt to guide this role (most useful for System role)',
+                placeholder: 'You are a helpful AI assistant that responds concisely.'
               },
               {
                 displayName: 'Enabled',
                 name: 'isEnabled',
                 type: 'boolean',
                 default: true,
-                description: 'Whether this role should be included in the conversation',
+                description: 'Whether this role is active in the conversation',
               },
             ],
           },
         ],
       },
       {
-        displayName: 'Input Message Field',
-        name: 'inputField',
-        type: 'string',
-        default: 'output',
-        displayOptions: {
-          show: {
-            mode: ['store'],
-          },
-        },
-        description: 'The name of the field containing the message to store',
-        required: true,
-        hint: 'This is often "output" for AI node responses or "message" for user inputs',
-      },
-      {
-        displayName: 'Spot Index',
+        displayName: 'Current Participant',
         name: 'spotIndex',
         type: 'number',
         default: 0,
@@ -385,42 +499,68 @@ export class RoundRobin implements INodeType {
             mode: ['store'],
           },
         },
-        description: 'Specify which spot to use (0-based index)',
+        description: 'Which participant is sending this message (0-based index)',
         required: true,
-        hint: '0 = first role, 1 = second role, etc.',
+        hint: '0 = first role, 1 = second role, etc.'
       },
-      // Example to help users understand the node
       {
-        displayName: 'Example',
+        displayName: 'Message Content Field',
+        name: 'inputField',
+        type: 'string',
+        default: 'output',
+        displayOptions: {
+          show: {
+            mode: ['store'],
+          },
+        },
+        description: 'Name of the input field containing the message to store',
+        required: true,
+        placeholder: 'output',
+        hint: 'Usually "output" from AI nodes or "message" from user inputs'
+      },
+      {
+        displayName: 'Usage Example',
         name: 'storeExample',
         type: 'notice',
-        default: 'For ChatGPT style conversations, use: User (index 0), Assistant (index 1), and System (index 2).',
+        default: '<b>Typical ChatGPT Conversation Setup:</b><br>• User (index 0): Human inputs<br>• Assistant (index 1): AI responses<br>• System (index 2): Instructions to guide the AI',
         displayOptions: {
           show: {
             mode: ['store'],
           },
         }
       },
-      // Retrieve mode parameters
+      
+      // RETRIEVE MODE PARAMETERS
+      {
+        displayName: 'Output Configuration',
+        name: 'retrieveHeading',
+        type: 'notice',
+        default: 'Configure how the conversation history should be formatted',
+        displayOptions: {
+          show: {
+            mode: ['retrieve'],
+          },
+        },
+      },
       {
         displayName: 'Output Format',
         name: 'outputFormat',
         type: 'options',
         options: [
           {
-            name: 'Array',
-            value: 'array',
-            description: 'Output messages as an array',
-          },
-          {
-            name: 'Object',
-            value: 'object',
-            description: 'Output messages as an object with role keys',
-          },
-          {
-            name: 'Conversation History',
+            name: 'Conversation History for LLM',
             value: 'conversationHistory',
-            description: 'Format as a conversation history for LLMs',
+            description: 'Format suitable for sending directly to AI models',
+          },
+          {
+            name: 'Message Array',
+            value: 'array',
+            description: 'Simple array of all messages with role and content',
+          },
+          {
+            name: 'Grouped by Role',
+            value: 'object',
+            description: 'Messages organized by participant role',
           },
         ],
         default: 'conversationHistory',
@@ -429,9 +569,8 @@ export class RoundRobin implements INodeType {
             mode: ['retrieve'],
           },
         },
-        description: 'Format of the retrieved messages',
+        description: 'How to structure the output data',
       },
-      // LLM Platform Selection
       {
         displayName: 'LLM Platform',
         name: 'llmPlatform',
@@ -440,7 +579,7 @@ export class RoundRobin implements INodeType {
           {
             name: 'OpenAI (ChatGPT)',
             value: 'openai',
-            description: 'Format for OpenAI models (GPT-3.5, GPT-4, etc.)',
+            description: 'Format compatible with OpenAI models (GPT-3.5, GPT-4, etc.)',
           },
           {
             name: 'Anthropic (Claude)',
@@ -455,7 +594,7 @@ export class RoundRobin implements INodeType {
           {
             name: 'Generic',
             value: 'generic',
-            description: 'Generic format that works with most LLMs',
+            description: 'Basic format compatible with most LLMs',
           },
         ],
         default: 'openai',
@@ -465,11 +604,10 @@ export class RoundRobin implements INodeType {
             outputFormat: ['conversationHistory'],
           },
         },
-        description: 'Which LLM platform to format the conversation history for',
+        description: 'Which AI model provider this conversation will be sent to',
       },
-      // System Prompt Options
       {
-        displayName: 'Include System Prompt',
+        displayName: 'Include System Instructions',
         name: 'includeSystemPrompt',
         type: 'boolean',
         default: true,
@@ -479,22 +617,22 @@ export class RoundRobin implements INodeType {
             outputFormat: ['conversationHistory'],
           },
         },
-        description: 'Whether to include system prompt/instructions in the conversation history',
+        description: 'Whether to include system role messages in the conversation history',
       },
       {
-        displayName: 'System Prompt Position',
+        displayName: 'System Instructions Position',
         name: 'systemPromptPosition',
         type: 'options',
         options: [
           {
             name: 'Start of Conversation',
             value: 'start',
-            description: 'Place system prompt at the beginning (as first message)',
+            description: 'Place system instructions at the beginning (recommended)',
           },
           {
             name: 'End of Conversation',
             value: 'end',
-            description: 'Place system prompt at the end (as last message)',
+            description: 'Place system instructions at the end',
           },
         ],
         default: 'start',
@@ -505,10 +643,10 @@ export class RoundRobin implements INodeType {
             includeSystemPrompt: [true],
           },
         },
-        description: 'Where to place the system prompt in the conversation',
+        description: 'Where to position system instructions in the conversation',
       },
       {
-        displayName: 'Simplify Output',
+        displayName: 'Simplified Output',
         name: 'simplifyOutput',
         type: 'boolean',
         default: true,
@@ -517,10 +655,10 @@ export class RoundRobin implements INodeType {
             mode: ['retrieve'],
           },
         },
-        description: 'Whether to return a simplified version of the response instead of the raw data'
+        description: 'Whether to provide clean output with just essential fields (recommended)'
       },
       {
-        displayName: 'Maximum Messages to Return',
+        displayName: 'Maximum Messages',
         name: 'maxMessages',
         type: 'number',
         default: 0,
@@ -529,51 +667,8 @@ export class RoundRobin implements INodeType {
             mode: ['retrieve'],
           },
         },
-        description: 'Maximum number of messages to return (0 for all messages)',
-      },
-      {
-        displayName: 'Storage Persistence',
-        name: 'storagePersistence',
-        type: 'options',
-        options: [
-          {
-            name: 'Use Static Data (Requires Trigger)',
-            value: 'staticData',
-            description: 'Store data in n8n static data (requires workflow to be activated with a trigger node)',
-          },
-          {
-            name: 'Use Binary Data (Reliable)',
-            value: 'binary',
-            description: 'Store data in binary output (reliable but requires passing binary data between nodes)',
-          },
-        ],
-        default: 'staticData',
-        description: 'How to persist data between executions',
-      },
-      {
-        displayName: 'Binary Input Property',
-        name: 'binaryInputProperty',
-        type: 'string',
-        default: 'data',
-        displayOptions: {
-          show: {
-            storagePersistence: ['binary'],
-            mode: ['retrieve', 'clear'],
-          },
-        },
-        description: 'Name of the binary property that contains the storage data',
-      },
-      {
-        displayName: 'Storage ID',
-        name: 'storageId',
-        type: 'string',
-        default: '',
-        displayOptions: {
-          show: {
-            mode: ['store', 'retrieve', 'clear'],
-          },
-        },
-        description: 'Optional: Set a consistent ID to share storage across multiple node instances. If left empty, workflow ID will be used.',
+        description: 'Maximum number of recent messages to include (0 = all messages)',
+        hint: 'Useful for limiting token usage with large conversation histories'
       },
     ],
   };
@@ -602,7 +697,7 @@ For reliable data storage between executions:
     const items = this.getInputData();
     const returnData: INodeExecutionData[] = [];
     const mode = this.getNodeParameter('mode', 0) as string;
-    const storagePersistence = this.getNodeParameter('storagePersistence', 0, 'staticData') as string;
+    const storagePersistence = this.getNodeParameter('storagePersistence', 0, 'binary') as string;
     
     try {
       // Get node name (still useful for logging) and workflow ID
@@ -662,9 +757,29 @@ For reliable data storage between executions:
         const newSpotCount = this.getNodeParameter('spotCount', 0) as number;
         const spotIndex = this.getNodeParameter('spotIndex', 0) as number;
         const inputField = this.getNodeParameter('inputField', 0) as string;
+        const maxRounds = this.getNodeParameter('maxRounds', 0, 0) as number;
         
         // Update spot count in storage using Workflow ID
         RoundRobinStorage.setSpotCount(staticData, workflowId, newSpotCount);
+        RoundRobinStorage.setMaxRounds(staticData, workflowId, maxRounds);
+        
+        // Check if we've reached the maximum rounds limit
+        if (maxRounds > 0) {
+          const hasReachedLimit = RoundRobinStorage.hasReachedRoundLimit(messages, newSpotCount, maxRounds);
+          if (hasReachedLimit) {
+            console.log(`[Round Limit] Maximum rounds (${maxRounds}) reached. Not adding new messages.`);
+            returnData.push({
+              json: {
+                status: 'limit_reached',
+                message: `Maximum conversation rounds (${maxRounds}) reached. Consider clearing the conversation to start over.`,
+                roundCount: RoundRobinStorage.calculateRoundCount(messages, newSpotCount),
+                maxRounds: maxRounds,
+                messageCount: messages.length
+              }
+            });
+            return [returnData];
+          }
+        }
         
         // Get roles if defined
         const rolesCollection = this.getNodeParameter('roles', 0) as {
@@ -721,6 +836,9 @@ For reliable data storage between executions:
           console.log(`Stored message for role "${roleName}":`, newMessage);
           console.log(`Total messages stored: ${updatedMessages.length}`);
           
+          // Calculate the current round count
+          const currentRounds = RoundRobinStorage.calculateRoundCount(updatedMessages, newSpotCount);
+          
           // Pass through the item with additional metadata
           returnData.push({
             json: {
@@ -729,6 +847,9 @@ For reliable data storage between executions:
               roundRobinSpotIndex: spotIndex,
               roundRobinStored: true,
               messageCount: updatedMessages.length,
+              roundCount: currentRounds,
+              maxRounds: maxRounds,
+              roundsRemaining: maxRounds > 0 ? Math.max(0, maxRounds - currentRounds) : null,
             },
             pairedItem: {
               item: i,
@@ -740,9 +861,12 @@ For reliable data storage between executions:
         RoundRobinStorage.setMessages(staticData, workflowId, updatedMessages);
         RoundRobinStorage.setLastUpdated(staticData, workflowId, Date.now());
         
+        // Calculate and update the round count
+        const updatedRoundCount = RoundRobinStorage.calculateRoundCount(updatedMessages, newSpotCount);
+        RoundRobinStorage.setRoundCount(staticData, workflowId, updatedRoundCount);
+        
         // Verify storage after saving to ensure data persisted within the staticData object
         RoundRobinStorage.verifyStoragePersistence(staticData, workflowId);
-        
       } else if (mode === 'retrieve') {
         const outputFormat = this.getNodeParameter('outputFormat', 0) as string;
         const maxMessages = this.getNodeParameter('maxMessages', 0, 0) as number;
@@ -841,6 +965,7 @@ For reliable data storage between executions:
       const newSpotCount = executeFunctions.getNodeParameter('spotCount', 0) as number;
       const spotIndex = executeFunctions.getNodeParameter('spotIndex', 0) as number;
       const inputField = executeFunctions.getNodeParameter('inputField', 0) as string;
+      const maxRounds = executeFunctions.getNodeParameter('maxRounds', 0, 0) as number;
       
       // Get roles if defined
       const rolesCollection = executeFunctions.getNodeParameter('roles', 0) as {
@@ -854,6 +979,7 @@ For reliable data storage between executions:
       // Check if we have binary input data to load existing data
       let existingMessages: any[] = [];
       let existingRoles = finalRoles;
+      let roundCount = 0;
       
       if (items[0]?.binary) {
         try {
@@ -867,6 +993,27 @@ For reliable data storage between executions:
           }
         } catch (error) {
           console.log(`[Binary Storage] Could not load existing data: ${error.message}`);
+        }
+      }
+      
+      // Check if we've reached the maximum rounds limit
+      if (maxRounds > 0) {
+        // Calculate current round count
+        roundCount = RoundRobinStorage.calculateRoundCount(existingMessages, newSpotCount);
+        const hasReachedLimit = RoundRobinStorage.hasReachedRoundLimit(existingMessages, newSpotCount, maxRounds);
+        
+        if (hasReachedLimit) {
+          console.log(`[Round Limit] Maximum rounds (${maxRounds}) reached. Not adding new messages.`);
+          returnData.push({
+            json: {
+              status: 'limit_reached',
+              message: `Maximum conversation rounds (${maxRounds}) reached. Consider clearing the conversation to start over.`,
+              roundCount: roundCount,
+              maxRounds: maxRounds,
+              messageCount: existingMessages.length
+            }
+          });
+          return;
         }
       }
       
@@ -903,11 +1050,33 @@ For reliable data storage between executions:
         console.log(`[Binary Storage] Stored message for role "${roleName}":`, newMessage);
       }
       
+      // Calculate the updated round count
+      const updatedRoundCount = RoundRobinStorage.calculateRoundCount(updatedMessages, newSpotCount);
+      
       // Store data in binary
-      const result = await storageManager.storeToBinary(updatedMessages, existingRoles, newSpotCount);
+      const result = await storageManager.storeToBinary(
+        updatedMessages, 
+        existingRoles, 
+        newSpotCount, 
+        {
+          roundCount: updatedRoundCount,
+          maxRounds: maxRounds
+        }
+      );
+      
+      // Add round count information to the result
+      const resultWithRounds = {
+        ...result,
+        json: {
+          ...(result as INodeExecutionData).json,
+          roundCount: updatedRoundCount,
+          maxRounds: maxRounds,
+          roundsRemaining: maxRounds > 0 ? Math.max(0, maxRounds - updatedRoundCount) : null,
+        }
+      };
       
       // Return the result with binary data
-      returnData.push(result as INodeExecutionData);
+      returnData.push(resultWithRounds as INodeExecutionData);
       
     } else if (mode === 'retrieve') {
       // Check if we have binary input data
@@ -929,11 +1098,28 @@ For reliable data storage between executions:
         filteredMessages = filteredMessages.slice(-maxMessages);
       }
       
+      // Calculate round count information
+      const spotCount = loadedData.spotCount || 3;
+      const roundCount = RoundRobinStorage.calculateRoundCount(filteredMessages, spotCount);
+      const maxRounds = loadedData.maxRounds || 0;
+      
       // Format output based on outputFormat parameter
       if (outputFormat === 'array') {
         processArrayOutput(returnData, filteredMessages, loadedData.roles, loadedData.lastUpdated, simplifyOutput);
+        // Add round information
+        if (returnData.length > 0) {
+          returnData[0].json.roundCount = roundCount;
+          returnData[0].json.maxRounds = maxRounds;
+          returnData[0].json.roundsRemaining = maxRounds > 0 ? Math.max(0, maxRounds - roundCount) : null;
+        }
       } else if (outputFormat === 'object') {
         processObjectOutput(returnData, filteredMessages, loadedData.roles, loadedData.lastUpdated, simplifyOutput);
+        // Add round information
+        if (returnData.length > 0) {
+          returnData[0].json.roundCount = roundCount;
+          returnData[0].json.maxRounds = maxRounds;
+          returnData[0].json.roundsRemaining = maxRounds > 0 ? Math.max(0, maxRounds - roundCount) : null;
+        }
       } else if (outputFormat === 'conversationHistory') {
         const includeSystemPrompt = executeFunctions.getNodeParameter('includeSystemPrompt', 0, false) as boolean;
         const systemPromptPosition = includeSystemPrompt 
@@ -954,6 +1140,13 @@ For reliable data storage between executions:
         } else {
           formatGenericConversation(returnData, filteredMessages, systemPrompt, includeSystemPrompt, systemPromptPosition, loadedData.lastUpdated, simplifyOutput, loadedData.roles);
         }
+        
+        // Add round information
+        if (returnData.length > 0) {
+          returnData[0].json.roundCount = roundCount;
+          returnData[0].json.maxRounds = maxRounds;
+          returnData[0].json.roundsRemaining = maxRounds > 0 ? Math.max(0, maxRounds - roundCount) : null;
+        }
       }
       
       // If there were no messages, add a default output
@@ -963,6 +1156,8 @@ For reliable data storage between executions:
             messages: [],
             messageCount: 0,
             lastUpdated: new Date().toISOString(),
+            roundCount: 0,
+            maxRounds: maxRounds,
             info: 'No messages found in storage'
           },
         });
@@ -970,17 +1165,18 @@ For reliable data storage between executions:
       
     } else if (mode === 'clear') {
       // Create an empty storage
-      const result = await storageManager.storeToBinary([], getDefaultRoles(), 3);
+      const result = await storageManager.storeToBinary([], getDefaultRoles(), 3, { roundCount: 0, maxRounds: 0 });
       
       // Return the result with binary data
       returnData.push({
         json: {
           success: true,
           operation: 'clear',
-          storageId,
-          info: 'All messages cleared',
+          timestamp: new Date().toISOString(),
+          roundCount: 0,
+          maxRounds: 0,
         },
-        binary: (result.binary || {}) as IBinaryKeyData,
+        binary: (result as INodeExecutionData).binary,
       });
     }
   }

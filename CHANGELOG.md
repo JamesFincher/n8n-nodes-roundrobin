@@ -2,14 +2,20 @@
 
 ## v0.9.1 (2024-04-04)
 ### Added
-- Added conversation round counter to track conversation turns
-- Added UI to display and limit the number of rounds
-- Added helpful hints and notices for better user experience
+- Added conversation round counter that tracks and limits conversation turns
+- Added ability to set maximum allowed rounds for conversation loops
+- Added round count information to all node outputs
 
 ### Changed
-- Made binary storage the default and only option for better persistence
-- Improved role configuration with better organization and UI
-- Enhanced storage ID field with clearer explanations
+- Made binary storage the default storage method for better data persistence
+- Improved UI with clearer parameter grouping and helpful descriptions
+- Enhanced role configuration with better organization and visual cues
+- Renamed various UI elements for clarity ("spots" -> "participants")
+
+### Fixed
+- Fixed data persistence issues by optimizing binary storage
+- Improved error handling during round counting and storage operations
+- Standardized binary property names for better workflow compatibility
 
 ## v0.8.9 (2024-04-04)
 ### Fixed

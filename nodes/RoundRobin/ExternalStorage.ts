@@ -19,6 +19,13 @@ export interface IRoundRobinExternalRole {
   isEnabled?: boolean;
 }
 
+// Interface for metrics and settings
+export interface IRoundRobinMetrics {
+  roundCount?: number;
+  maxRounds?: number;
+  [key: string]: any; // For future extensibility
+}
+
 /**
  * ExternalStorageManager provides alternative storage options for the RoundRobin node
  * to overcome n8n's limitation that static data only persists with trigger nodes.
@@ -44,7 +51,8 @@ export class ExternalStorageManager {
   async storeToBinary(
     messages: IRoundRobinExternalMessage[], 
     roles: IRoundRobinExternalRole[],
-    spotCount: number
+    spotCount: number,
+    metrics?: IRoundRobinMetrics
   ): Promise<IDataObject> {
     try {
       // Create a data object with all necessary information
@@ -53,13 +61,17 @@ export class ExternalStorageManager {
         roles,
         spotCount,
         lastUpdated: Date.now(),
+        roundCount: metrics?.roundCount || 0,
+        maxRounds: metrics?.maxRounds || 0,
+        // Include any other metrics for future expansion
+        ...(metrics || {})
       };
       
       // Convert to JSON string
       const jsonData = JSON.stringify(storageData);
       
       // Store in binary property
-      const binaryPropertyName = `roundrobin_${this.storageId}`;
+      const binaryPropertyName = `data`;
       
       const newItem = {
         json: {
@@ -69,6 +81,11 @@ export class ExternalStorageManager {
           lastUpdated: new Date().toISOString(),
           messageCount: messages.length,
           rolesCount: roles.length,
+          roundCount: metrics?.roundCount || 0,
+          maxRounds: metrics?.maxRounds || 0,
+          roundsRemaining: metrics?.maxRounds && metrics?.maxRounds > 0 
+            ? Math.max(0, metrics.maxRounds - (metrics.roundCount || 0)) 
+            : null,
         },
         binary: {
           [binaryPropertyName]: await this.executeFunctions.helpers.prepareBinaryData(
@@ -95,17 +112,21 @@ export class ExternalStorageManager {
     messages: IRoundRobinExternalMessage[],
     roles: IRoundRobinExternalRole[],
     spotCount: number,
-    lastUpdated: number
+    lastUpdated: number,
+    roundCount?: number,
+    maxRounds?: number
   }> {
     try {
-      const binaryPropertyName = `roundrobin_${this.storageId}`;
+      const binaryPropertyName = this.executeFunctions.getNodeParameter('binaryInputProperty', 0, 'data') as string;
       
       if (!binaryData || !binaryData[binaryPropertyName]) {
         return {
           messages: [],
           roles: [],
           spotCount: 0,
-          lastUpdated: 0
+          lastUpdated: 0,
+          roundCount: 0,
+          maxRounds: 0
         };
       }
       
@@ -120,7 +141,9 @@ export class ExternalStorageManager {
         messages: storageData.messages || [],
         roles: storageData.roles || [],
         spotCount: storageData.spotCount || 0,
-        lastUpdated: storageData.lastUpdated || 0
+        lastUpdated: storageData.lastUpdated || 0,
+        roundCount: storageData.roundCount || 0,
+        maxRounds: storageData.maxRounds || 0
       };
     } catch (error) {
       throw new NodeOperationError(
